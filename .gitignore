@@ -1,0 +1,9 @@
+/node_modules
+package-lock.json
+*.lock
+yarn.lock
+pnpm-lock.yaml
+.DS_Store
+.vscode
+.env
+.env.local
