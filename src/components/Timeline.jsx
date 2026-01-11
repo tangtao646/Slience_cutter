@@ -93,43 +93,41 @@ const Timeline = ({
         setSelectedTrack(null);
     }, [fileName]); 
     
-    // Layout Duration: In continuous mode, we show the full base (confirmed cut), 
-    // but pending segments are just overlays and shouldn't shrink the timeline width.
+    // Layout Duration: In continuous mode, we show the full duration (as the background tapes).
+    // In fragmented mode, we show the collapsed duration (virtualDuration).
     const layoutDuration = useMemo(() => {
-        return viewMode === 'continuous' ? (stats?.currentBase || duration) : virtualDuration;
-    }, [viewMode, stats?.currentBase, duration, virtualDuration]);
+        return viewMode === 'continuous' ? duration : virtualDuration;
+    }, [viewMode, duration, virtualDuration]);
 
     // Calculate dynamic zoom limits
     const { minZoom, fitZoom } = useMemo(() => {
         const safeDuration = layoutDuration > 0 ? layoutDuration : 1;
         const safeWidth = viewportWidth > 0 ? viewportWidth : 800;
         const fit = safeWidth / safeDuration;
-        // Allow zooming out until the track takes up half the container width (0.5 * fit)
+        
         return { 
-            minZoom: Math.max(0.01, fit * 0.5), 
+            // 允许大幅缩小，最高支持缩至可视宽度的 20%
+            minZoom: fit * 0.2, 
             fitZoom: fit 
         };
     }, [layoutDuration, viewportWidth]);
 
 
-    // Initial Auto-fit
+    // Initial Auto-fit & Reset on File Change
     useEffect(() => {
-        if (layoutDuration > 0 && viewportWidth > 0) {
-             setZoom(prev => {
-                // Only set if zoom is currently at default/fallback
-                if (prev === DEFAULT_ZOOM || !Number.isFinite(prev)) return minZoom;
-                return prev;
-             });
+        if (layoutDuration > 0 && viewportWidth > 0 && fitZoom > 0) {
+            // 初始绘制：将整轴宽度适配到可视区域的 55%，提供充足的呼吸感
+            setZoom(fitZoom * 0.55);
         }
-    }, [minZoom, layoutDuration, viewportWidth]); 
+    }, [fileName, layoutDuration, viewportWidth, fitZoom]); 
 
     // Derived state
     const totalWidth = useMemo(() => {
         const d = Number.isFinite(layoutDuration) ? layoutDuration : 0;
         const z = Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
-        const v = Number.isFinite(viewportWidth) ? viewportWidth : 0;
-        return Math.max(v * 1.5, d * z);
-    }, [layoutDuration, zoom, viewportWidth]);
+        // 增加一定的右侧留白 (100px)，防止波形完全贴边
+        return d * z + 100;
+    }, [layoutDuration, zoom]);
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
     // Helper: Time <-> Pixel (These now operate on VIRTUAL time)
@@ -858,7 +856,8 @@ const Timeline = ({
                 const delta = e.deltaY * -0.01;
                 
                 setZoom(prevZoom => {
-                    const newZoom = Math.max(minZoom, Math.min(MAX_ZOOM, prevZoom * (1 + delta)));
+                    // 允许缩得更小 (minZoom 的 0.5倍)，直到波形只占屏幕一小部分，方便全局观察
+                    const newZoom = Math.max(minZoom * 0.5, Math.min(MAX_ZOOM, prevZoom * (1 + delta)));
                     
                     const currentScrollLeft = el.scrollLeft;
                     const rect = el.getBoundingClientRect();
@@ -947,8 +946,8 @@ const Timeline = ({
                 onScroll={handleScroll} 
                 // onWheel is handled by effect
             >
-                {/* Spacer to force scroll width (include padding/margin?) */}
-                <div style={{ width: `${totalWidth + viewportWidth/2}px`, height: '1px' }} />
+                {/* Spacer to force scroll width */}
+                <div style={{ width: `${totalWidth}px`, height: '1px' }} />
                 
                 {/* Canvas Container - Sticky or Fixed-ish */}
                 <div style={{ position: 'sticky', left: 0, top: 0, height: '100%' }}>
