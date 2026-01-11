@@ -760,27 +760,24 @@ const Timeline = ({
 
         // --- PRIORITY 2: Media Tracks (Clips) ---
         let linkSelection = false;
-        if (isWithinTimeRange) {
-            if (hasVideo && y >= videoY && y <= videoY + TRACK_HEIGHT) {
-                linkSelection = true;
-            } else if (hasAudio && y >= audioY && y <= audioY + TRACK_HEIGHT) {
-                linkSelection = true;
-            }
+        // 允许在整个轨道宽度（含超出时长部分）点击以选中轨道
+        if (hasVideo && y >= videoY && y <= videoY + TRACK_HEIGHT) {
+            linkSelection = true;
+        } else if (hasAudio && y >= audioY && y <= audioY + TRACK_HEIGHT) {
+            linkSelection = true;
         }
         
         if (linkSelection) {
             setSelectedTrack('media');
             let foundIdx = -1;
-            if (viewMode === 'continuous' && silenceSegments) {
-                // In continuous mode, the "media" is just the whole background
-                foundIdx = -1; 
-            } else if (viewMode === 'fragmented' && speechClips) {
+            // 只有在有效时间范围内才去寻找具体的片段
+            if (isWithinTimeRange && viewMode === 'fragmented' && speechClips) {
                 foundIdx = speechClips.findIndex(c => vTime >= c.virtualStart && vTime <= (c.virtualStart + c.duration));
             }
             if (foundIdx !== -1) {
                 setSelectedIndices([foundIdx]);
             } else {
-                setSelectedIndices([]);
+                setSelectedIndices([]); // 选中了轨道，但没选中具体片段
             }
         } else {
             // Nothing hit -> Start Box Selection
@@ -927,9 +924,11 @@ const Timeline = ({
                     bulkDelete(selectedIndices, 'silence');
                     setSelectedIndices([]);
                 } else if (selectedTrack === 'media') {
-                    if (viewMode === 'fragmented') {
+                    // 如果在碎片模式下选中了具体片段，则执行批量删除片段
+                    if (viewMode === 'fragmented' && selectedIndices.length > 0) {
                         bulkDelete(selectedIndices, 'media');
-                    } else if (viewMode === 'continuous') {
+                    } else {
+                        // 否则（连续模式，或碎片模式下选中整个轨道），执行删除整个媒体
                         onDeleteMedia && onDeleteMedia();
                     }
                     setSelectedTrack(null);
@@ -1006,13 +1005,47 @@ const Timeline = ({
                 {/* Track Headers */}
                 {/* Video Icon */}
                 {hasVideo && (
-                    <div style={{ marginTop: 4, height: TRACK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                    <div 
+                        style={{ 
+                            marginTop: 4, 
+                            height: TRACK_HEIGHT, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            color: selectedTrack === 'media' ? COLORS.videoText : '#666',
+                            cursor: 'pointer',
+                            background: selectedTrack === 'media' ? 'rgba(62, 107, 86, 0.2)' : 'transparent',
+                            borderLeft: selectedTrack === 'media' ? `3px solid ${COLORS.videoTrackBorder}` : 'none'
+                        }}
+                        onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setSelectedTrack('media');
+                            setSelectedIndices([]);
+                        }}
+                    >
                         <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M0 1a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H1a1 1 0 0 1-1-1V1zm4 0v6h8V1H4zm8 8H4v6h8V9zM1 1v2h2V1H1zm2 3H1v2h2V4zM1 7v2h2V7H1zm2 3H1v2h2v-2zm-2 3v2h2v-2H1zM15 1h-2v2h2V1zm-2 3v2h2V4h-2zm2 3h-2v2h2V7zm-2 3v2h2v-2h-2zm2 3h-2v2h2v-2z"/></svg> 
                     </div>
                 )}
                 {/* Audio Icon */}
                 {hasAudio && (
-                    <div style={{ marginTop: hasVideo ? TRACK_GAP : 4, height: TRACK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                    <div 
+                        style={{ 
+                            marginTop: hasVideo ? TRACK_GAP : 4, 
+                            height: TRACK_HEIGHT, 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            justifyContent: 'center', 
+                            color: selectedTrack === 'media' ? COLORS.waveformFill : '#666',
+                            cursor: 'pointer',
+                            background: selectedTrack === 'media' ? 'rgba(129, 140, 248, 0.1)' : 'transparent',
+                            borderLeft: selectedTrack === 'media' ? `3px solid ${COLORS.audioTrackBorder}` : 'none'
+                        }}
+                        onMouseDown={(e) => {
+                            e.stopPropagation();
+                            setSelectedTrack('media');
+                            setSelectedIndices([]);
+                        }}
+                    >
                         <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/><path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/><path d="M10.025 8a4.486 4.486 0 0 1-1.318 3.182L8 10.475A3.489 3.489 0 0 0 9.025 8c0-.966-.392-1.841-1.025-2.475l.707-.707A4.486 4.486 0 0 1 10.025 8zM7 4a.5.5 0 0 0-.812-.39L3.825 5.5H1.5A.5.5 0 0 0 1 6v4a.5.5 0 0 0 .5.5h2.325l2.363 1.89A.5.5 0 0 0 7 12V4zM4.312 6.39 6 5.04v5.92L4.312 9.61A.5.5 0 0 0 4 9.5H2v-3h2a.5.5 0 0 0 .312-.11z"/></svg>
                     </div>
                 )}

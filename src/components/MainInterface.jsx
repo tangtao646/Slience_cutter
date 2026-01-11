@@ -451,6 +451,17 @@ const MainInterface = ({ appData, isTauri }) => {
         await appData.tauri.cancelExport();
     };
 
+    // 监听片段状态：如果所有片段都被删完了（在切片模式下），重置策略档位
+    useEffect(() => {
+        if (currentFile && viewMode === 'fragmented' && stats.remaining <= 0.001 && confirmedSegments.length > 0) {
+            // 当所有语音都被“删没”了，此时的档位策略已失去意义，重置 UI 到初始 Natural 状态
+            // 这也有助于用户重新开始分析，避免逻辑冲突
+            setIntensity(0.25);
+            setCommittedIntensity(0);
+            setWaveInfo('片段已空，档位已重置');
+        }
+    }, [currentFile, viewMode, stats.remaining, confirmedSegments.length]);
+
     // 监听后端进度
     useEffect(() => {
         let unlistenFn = null;
@@ -502,17 +513,26 @@ const MainInterface = ({ appData, isTauri }) => {
 
     const handleDeleteTrack = (type) => {
         if (type === 'media') {
-            // 真正的移除：清除所有分析和文件状态
+            // 真正的移除：清除所有分析和文件状态，彻底重置应用到初始状态
             setCurrentFile(null);
             setFileInfo({
                 name: '--', size: '--', duration: '--:--', format: '--',
-                hasVideo: false, hasAudio: false
+                hasVideo: true, hasAudio: true // 恢复默认值
             });
             setConfirmedSegments([]);
             setPendingSegments([]);
-            setHistory([]);
+            setHistory([]); 
             setVideoDuration(0);
             setWaveInfo('No file loaded');
+            
+            // 重置策略与 UI 状态
+            setIntensity(0.25); // 恢复初始 Natural 档位
+            setCommittedIntensity(0);
+            setThreshold(0.015);
+            setIsAutoThreshold(true);
+            setPadding(0.25);
+            setExportEnabled(false);
+            setExportProgress(0);
             
             // 重置全局状态单例
             appData.state.resetFileState();

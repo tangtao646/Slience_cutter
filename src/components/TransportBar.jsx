@@ -101,13 +101,19 @@ const TransportBar = ({ appData, currentFile, segments, pendingSegments, viewMod
     };
 
     const handleTogglePlay = useCallback(() => {
-        if (!appData.videoPlayer) return;
+        if (!appData.videoPlayer || !currentFile) return;
+
+        // 在碎片化模式下，如果没有剩余内容，禁止播放
+        if (viewMode === 'fragmented' && (stats?.remaining || 0) <= 0.01) {
+            return;
+        }
+
         if (isPlaying) {
             appData.videoPlayer.pause();
         } else {
             appData.videoPlayer.play();
         }
-    }, [appData.videoPlayer, isPlaying]);
+    }, [appData.videoPlayer, isPlaying, currentFile, viewMode, stats?.remaining]);
 
     useEffect(() => {
         const handleSpace = (e) => {
