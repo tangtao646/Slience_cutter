@@ -327,15 +327,31 @@ const Timeline = ({
         const videoH = TRACK_HEIGHT;
         
         if (hasVideo && drawX < viewportWidth) {
+             const drawFilmStrip = (x, y, w, h) => {
+                 // Film Perforations (Top & Bottom)
+                 const perfSize = 4;
+                 const perfGap = 8;
+                 const perfYOffset = 2;
+                 
+                 ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                 for (let px = x + 2; px < x + w - perfSize; px += perfGap) {
+                     ctx.fillRect(px, y + perfYOffset, perfSize, perfSize);
+                     ctx.fillRect(px, y + h - perfSize - perfYOffset, perfSize, perfSize);
+                 }
+             };
+
              if (viewMode === 'continuous') {
                  // Continuous BG
                  const isMediaSelected = selectedTrack === 'media';
                  ctx.fillStyle = isMediaSelected ? '#3e6b56' : COLORS.videoTrackBg;
                  ctx.strokeStyle = isMediaSelected ? '#fff' : COLORS.videoTrackBorder;
                  ctx.lineWidth = isMediaSelected ? 2 : 1;
-                 roundRect(ctx, drawX, videoY, timeToPixel(duration), videoH, 6);
+                 const trackW = timeToPixel(duration);
+                 roundRect(ctx, drawX, videoY, trackW, videoH, 6);
                  ctx.fill();
                  ctx.stroke();
+
+                 drawFilmStrip(drawX, videoY, trackW, videoH);
 
                  if (isMediaSelected) {
                     ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
@@ -345,12 +361,12 @@ const Timeline = ({
                  // Label (Always draw if visible)
                  if (fileName) {
                     ctx.fillStyle = COLORS.videoText;
-                    ctx.font = '11px sans-serif';
+                    ctx.font = 'bold 10px sans-serif'; 
                     ctx.textBaseline = 'middle';
                     const labelX = Math.max(drawX + 10, 10);
                     const labelWidth = ctx.measureText(fileName).width;
-                    if (labelX + labelWidth < drawX + totalVW - 5) {
-                        ctx.fillText(fileName, labelX, videoY + videoH / 2);
+                    if (labelX + labelWidth < drawX + trackW - 5) {
+                        ctx.fillText(fileName.toUpperCase(), labelX, videoY + videoH / 2);
                     }
                  }
              } else {
@@ -368,6 +384,8 @@ const Timeline = ({
                      ctx.fill();
                      ctx.stroke();
 
+                     drawFilmStrip(sx, videoY, ex - sx, videoH);
+
                      // Draw label on clips if they are long enough
                      if (fileName && ex - sx > 40) {
                         ctx.save();
@@ -376,12 +394,12 @@ const Timeline = ({
                         ctx.clip();
                         
                         ctx.fillStyle = COLORS.videoText;
-                        ctx.font = '10px sans-serif';
+                        ctx.font = 'bold 9px sans-serif';
                         ctx.textBaseline = 'middle';
                         const labelX = Math.max(sx + 10, 10);
                         const labelWidth = ctx.measureText(fileName).width;
                         if (labelX + labelWidth < ex - 5) {
-                            ctx.fillText(fileName, labelX, videoY + videoH / 2);
+                            ctx.fillText(fileName.toUpperCase(), labelX, videoY + videoH / 2);
                         }
                         ctx.restore();
                      }
@@ -439,13 +457,13 @@ const Timeline = ({
                         const isSelected = selectedTrack === 'silence' && selectedIdx === i;
                         ctx.fillStyle = isSelected ? 'rgba(0, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.35)'; 
                         
-                        // 仅覆盖视频和音频轨道区域，不遮挡刻度尺和外部区域
-                        ctx.fillRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                        // 仅在音频轨道区域绘制，避免在纯音频模式下出界
+                        ctx.fillRect(sx, audioY, rectW, audioH);
                         
                         if (isSelected) {
                             ctx.strokeStyle = '#60a5fa';
                             ctx.lineWidth = 2;
-                            ctx.strokeRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                            ctx.strokeRect(sx, audioY, rectW, audioH);
                         }
                     }
                 });
@@ -466,18 +484,18 @@ const Timeline = ({
                         const isSelected = selectedTrack === 'pending' && selectedIdx === i;
                         ctx.fillStyle = isSelected ? 'rgba(239, 68, 68, 0.6)' : 'rgba(239, 68, 68, 0.3)'; 
                         
-                        // 仅覆盖轨道区域
-                        ctx.fillRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                        // 仅在音频轨道区域绘制，保持视觉重点并防止出界
+                        ctx.fillRect(sx, audioY, rectW, audioH);
                         
                         if (isSelected) {
                             ctx.strokeStyle = '#ffffff';
                             ctx.lineWidth = 2;
-                            ctx.strokeRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                            ctx.strokeRect(sx, audioY, rectW, audioH);
                         } else {
                             // 非选中状态下使用极细且半透明的边框，减少视觉干扰
                             ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
                             ctx.lineWidth = 1;
-                            ctx.strokeRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                            ctx.strokeRect(sx, audioY, rectW, audioH);
                         }
                     }
                 });
@@ -651,7 +669,8 @@ const Timeline = ({
         
         // --- PRIORITY 1: Silence Segments (The Red/Dark Overlays) ---
         // These should take precedence because they are "on top" visually
-        if (isWithinTimeRange && (y >= TRACK_START_Y && y <= audioY + TRACK_HEIGHT)) {
+        // 我们将其落点限制在音频轨道，与绘制逻辑保持一致
+        if (hasAudio && isWithinTimeRange && (y >= audioY && y <= audioY + TRACK_HEIGHT)) {
             // Check PENDING segments first (Red ones - usually what the user is working with)
             for (let i = 0; i < pendingSegments.length; i++) {
                 const seg = pendingSegments[i];
@@ -718,7 +737,7 @@ const Timeline = ({
         if (isWithinTimeRange) {
             if (hasVideo && y >= videoY && y <= videoY + TRACK_HEIGHT) {
                 linkSelection = true;
-            } else if (y >= audioY && y <= audioY + TRACK_HEIGHT) {
+            } else if (hasAudio && y >= audioY && y <= audioY + TRACK_HEIGHT) {
                 linkSelection = true;
             }
         }
@@ -754,7 +773,7 @@ const Timeline = ({
             // Cursor Feedback
             if (viewMode === 'continuous') {
                 const audioY = hasVideo ? (TRACK_START_Y + TRACK_HEIGHT + TRACK_GAP) : TRACK_START_Y;
-                if (y >= audioY && y <= audioY + TRACK_HEIGHT) {
+                if (hasAudio && y >= audioY && y <= audioY + TRACK_HEIGHT) {
                     const HIT_THRESHOLD = 8 / zoom;
                     const isNearEdge = silenceSegments.some(seg => 
                         Math.abs(rTime - seg.start) < HIT_THRESHOLD || 
@@ -892,9 +911,11 @@ const Timeline = ({
                     </div>
                 )}
                 {/* Audio Icon */}
-                 <div style={{ marginTop: hasVideo ? TRACK_GAP : 4, height: TRACK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
-                     <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/><path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/><path d="M10.025 8a4.486 4.486 0 0 1-1.318 3.182L8 10.475A3.489 3.489 0 0 0 9.025 8c0-.966-.392-1.841-1.025-2.475l.707-.707A4.486 4.486 0 0 1 10.025 8zM7 4a.5.5 0 0 0-.812-.39L3.825 5.5H1.5A.5.5 0 0 0 1 6v4a.5.5 0 0 0 .5.5h2.325l2.363 1.89A.5.5 0 0 0 7 12V4zM4.312 6.39 6 5.04v5.92L4.312 9.61A.5.5 0 0 0 4 9.5H2v-3h2a.5.5 0 0 0 .312-.11z"/></svg>
-                </div>
+                {hasAudio && (
+                    <div style={{ marginTop: hasVideo ? TRACK_GAP : 4, height: TRACK_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666' }}>
+                        <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.536 14.01A8.473 8.473 0 0 0 14.026 8a8.473 8.473 0 0 0-2.49-6.01l-.708.707A7.476 7.476 0 0 1 13.025 8c0 2.071-.84 3.946-2.197 5.303l.708.707z"/><path d="M10.121 12.596A6.48 6.48 0 0 0 12.025 8a6.48 6.48 0 0 0-1.904-4.596l-.707.707A5.483 5.483 0 0 1 11.025 8a5.483 5.483 0 0 1-1.61 3.89l.706.706z"/><path d="M10.025 8a4.486 4.486 0 0 1-1.318 3.182L8 10.475A3.489 3.489 0 0 0 9.025 8c0-.966-.392-1.841-1.025-2.475l.707-.707A4.486 4.486 0 0 1 10.025 8zM7 4a.5.5 0 0 0-.812-.39L3.825 5.5H1.5A.5.5 0 0 0 1 6v4a.5.5 0 0 0 .5.5h2.325l2.363 1.89A.5.5 0 0 0 7 12V4zM4.312 6.39 6 5.04v5.92L4.312 9.61A.5.5 0 0 0 4 9.5H2v-3h2a.5.5 0 0 0 .312-.11z"/></svg>
+                    </div>
+                )}
             </div>
 
             {/* Scrolling Content */}
@@ -915,7 +936,7 @@ const Timeline = ({
                     const time = pixelToTime(actualX);
                     
                     const audioY = hasVideo ? (TRACK_START_Y + TRACK_HEIGHT + TRACK_GAP) : TRACK_START_Y;
-                    if (y >= audioY && y <= audioY + TRACK_HEIGHT) {
+                    if (hasAudio && y >= audioY && y <= audioY + TRACK_HEIGHT) {
                         setContextMenu({
                             x: e.clientX,
                             y: e.clientY,

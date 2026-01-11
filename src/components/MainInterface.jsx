@@ -294,12 +294,14 @@ const MainInterface = ({ appData, isTauri }) => {
         setHistory([]);
         setExportEnabled(false);
 
+        const isAudioOnly = /\.(mp3|wav|m4a|flac|aac|ogg)$/i.test(info.name);
+
         setFileInfo({
             name: info.name,
             size: info.file ? formatFileSize(info.file.size) : '--',
             duration: '--:--',
             format: getFileFormat(info.name),
-            hasVideo: true,
+            hasVideo: !isAudioOnly,
             hasAudio: true
         });
 
@@ -362,18 +364,19 @@ const MainInterface = ({ appData, isTauri }) => {
             setWaveInfo('音频已提取');
             
             // 重要：同步数值时长到中台 Hook
-            if (Number.isFinite(audioData.duration)) {
+            // 注意：如果音频提取出的时长为 0（静音视频），则不覆盖已通过 ffprobe 获取的时长
+            if (Number.isFinite(audioData.duration) && audioData.duration > 0) {
                 setVideoDuration(audioData.duration);
+                setFileInfo(prev => ({
+                    ...prev,
+                    duration: formatDuration(audioData.duration)
+                }));
             }
             
             setThreshold(0.015);
             setIsAutoThreshold(true);
             
             setAudioDataReady(prev => prev + 1);
-            setFileInfo(prev => ({
-                ...prev,
-                duration: Number.isFinite(audioData.duration) ? formatDuration(audioData.duration) : '--:--'
-            }));
         }
     };
 
