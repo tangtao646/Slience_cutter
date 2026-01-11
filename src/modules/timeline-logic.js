@@ -140,3 +140,48 @@ export function generateSpeechClips(totalDuration, silenceSegments) {
 
     return clips;
 }
+
+/**
+ * 从一组片段中减去另一组片段 (Difference: a - b)
+ * 用于当用户已经确认了一些静音区，再次探测时，排除掉这些已确定的区域
+ */
+export function subtractSegments(a, b) {
+    if (!a || a.length === 0) return [];
+    if (!b || b.length === 0) return a;
+    
+    // 为了简化处理，我们遍历 a 中的每一个片段，并在其基础上减去 b
+    let result = [...a];
+    
+    // 将 b 合并以减少计算循环
+    const subtractor = mergeSegments(b);
+    
+    subtractor.forEach(s => {
+        const nextResult = [];
+        result.forEach(r => {
+            // Case 1: 无交集
+            if (s.end <= r.start || s.start >= r.end) {
+                nextResult.push(r);
+            }
+            // Case 2: s 完全覆盖 r (被减去)
+            else if (s.start <= r.start && s.end >= r.end) {
+                // do nothing
+            }
+            // Case 3: s 在 r 中间 (劈开)
+            else if (s.start > r.start && s.end < r.end) {
+                nextResult.push({ ...r, end: s.start });
+                nextResult.push({ ...r, start: s.end });
+            }
+            // Case 4: s 覆盖 r 的开头
+            else if (s.end > r.start && s.end < r.end) {
+                nextResult.push({ ...r, start: s.end });
+            }
+            // Case 5: s 覆盖 r 的结尾
+            else if (s.start > r.start && s.start < r.end) {
+                nextResult.push({ ...r, end: s.start });
+            }
+        });
+        result = nextResult;
+    });
+    
+    return result.filter(s => (s.end - s.start) > 0.01);
+}

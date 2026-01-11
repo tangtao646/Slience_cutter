@@ -7,7 +7,7 @@ import WaveformSection from './WaveformSection';
 import ExportProgressModal from './ExportProgressModal';
 import { formatDuration, formatFileSize } from '../modules/utils';
 import { useTimelineModel } from '../hooks/useTimelineModel';
-import { mergeSegments } from '../modules/timeline-logic';
+import { mergeSegments, subtractSegments } from '../modules/timeline-logic';
 
 const MainInterface = ({ appData, isTauri }) => {
     console.log('[MainInterface] Render', { hasFile: !!appData?.state?.currentFile });
@@ -43,11 +43,32 @@ const MainInterface = ({ appData, isTauri }) => {
     const [timeDisplay, setTimeDisplay] = useState(['15m', '30m', '45m']);
     const [audioDataReady, setAudioDataReady] = useState(0); 
 
+    // --- 核心状态变更与历史记录 (Undo) ---
+    const commitSegments = useCallback((newSegments, skipHistory = false) => {
+        if (!skipHistory) {
+            // 保存当前状态到历史记录
+            setHistory(prev => {
+                const last = prev[prev.length - 1];
+                // 如果当前状态和最后一次历史一致，不重复压栈
+                if (last && JSON.stringify(last.confirmedSegments) === JSON.stringify(confirmedSegments)) {
+                    return prev;
+                }
+                return [...prev, {
+                    confirmedSegments: [...confirmedSegments],
+                    committedIntensity: committedIntensity
+                }].slice(-30);
+            });
+        }
+        
+        setConfirmedSegments(newSegments);
+        setExportEnabled(true);
+    }, [confirmedSegments, committedIntensity]);
+
     // 使用中台 Hook 管理核心逻辑
     const timeline = useTimelineModel({
         totalDuration: videoDuration || (appData?.state?.audioData?.duration) || 0,
         confirmedSegments,
-        setConfirmedSegments,
+        setConfirmedSegments: commitSegments, // 核心重构：注入带历史功能的 commit 函数
         pendingSegments,
         setPendingSegments,
         viewMode
@@ -55,54 +76,18 @@ const MainInterface = ({ appData, isTauri }) => {
 
     const { stats, speechClips } = timeline;
 
-    const subtractSegments = (minuend, subtrahend) => {
-        const getStart = s => s.start ?? s.startTime ?? 0;
-        const getEnd = s => s.end ?? s.endTime ?? 0;
-        
-        // 先对被减数进行 Union 处理，确保它也是干净的
-        let result = minuend.map(s => ({ start: getStart(s), end: getEnd(s) }));
-        
-        subtrahend.forEach(sub => {
-            const subStart = getStart(sub);
-            const subEnd = getEnd(sub);
-            const nextResult = [];
-            
-            result.forEach(seg => {
-                // 情况 1: 完全不重叠
-                if (seg.end <= subStart || seg.start >= subEnd) {
-                    nextResult.push(seg);
-                } 
-                // 情况 2: 被减数完全包含在减数中
-                else if (seg.start >= subStart && seg.end <= subEnd) {
-                    // 彻底移除
-                }
-                // 情况 3: 减数切掉了被减数的一头（左侧）
-                else if (seg.start < subStart && seg.end <= subEnd) {
-                    nextResult.push({ start: seg.start, end: subStart });
-                }
-                // 情况 4: 减数切掉了被减数的一尾（右侧）
-                else if (seg.start >= subStart && seg.end > subEnd) {
-                    nextResult.push({ start: subEnd, end: seg.end });
-                }
-                // 情况 5: 减数在被减数中间切了一刀（一分为二）
-                else if (seg.start < subStart && seg.end > subEnd) {
-                    nextResult.push({ start: seg.start, end: subStart });
-                    nextResult.push({ start: subEnd, end: seg.end });
-                }
-            });
-            result = nextResult;
-        });
-        
-        return result.map(s => ({ ...s, duration: s.end - s.start }));
-    };
-
-    // 撤销操作逻辑
     const handleUndo = useCallback(() => {
-        if (history.length === 0) return;
-        const previous = history[history.length - 1];
-        setConfirmedSegments(previous.confirmedSegments);
-        setCommittedIntensity(previous.committedIntensity);
-        setIntensity(previous.committedIntensity); // 进度条也滚回去
+        if (history.length === 0) {
+            setWaveInfo('没有可撤销的操作');
+            return;
+        }
+        const lastSnapshot = history[history.length - 1];
+        
+        // 恢复状态
+        setConfirmedSegments(lastSnapshot.confirmedSegments);
+        setCommittedIntensity(lastSnapshot.committedIntensity);
+        setIntensity(lastSnapshot.committedIntensity); 
+        
         setHistory(prev => prev.slice(0, -1));
         setWaveInfo('已撤销上一步操作');
     }, [history]);
@@ -110,6 +95,9 @@ const MainInterface = ({ appData, isTauri }) => {
     // 监听全局快捷键 Cmd/Ctrl + Z
     useEffect(() => {
         const handleKeyDown = (e) => {
+            // 排除输入框，避免干扰正常的文本输入撤销
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
             if ((e.metaKey || e.ctrlKey) && e.key === 'z') {
                 e.preventDefault();
                 handleUndo();
@@ -132,20 +120,10 @@ const MainInterface = ({ appData, isTauri }) => {
         }
     }, [confirmedSegments, appData]);
 
-    // 辅助函数：更新 UI 层的 segments (例如通过拖拽调整时调用)
     const handleUpdateSegments = useCallback((newSegments) => {
-        // 当用户手动修改时，由于逻辑分层，我们需要搞清楚修改的是哪一部分
-        // 简单处理：手动修改直接作用于整体
-        setConfirmedSegments(newSegments);
-        setExportEnabled(newSegments.length > 0);
-        
-        appData.state.silenceSegments = newSegments.map(s => ({
-            startTime: s.start,
-            endTime: s.end,
-            duration: s.end - s.start,
-            averageDb: s.averageDb || -60.0
-        }));
-    }, [appData.state]);
+        // 用户手动调整（拖拽等）
+        commitSegments(newSegments);
+    }, [commitSegments]);
 
     // 同步时间显示
     useEffect(() => {

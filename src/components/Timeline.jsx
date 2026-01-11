@@ -113,13 +113,25 @@ const Timeline = ({
     }, [layoutDuration, viewportWidth]);
 
 
-    // Initial Auto-fit & Reset on File Change
+    // --- 缩放逻辑优化 ---
+    
+    // 记录当前文件，用于判断是否是“新打开”
+    const lastFileRef = useRef(null);
+
+    // 初始适配：仅在文件完全切换时触发一次
     useEffect(() => {
-        if (layoutDuration > 0 && viewportWidth > 0 && fitZoom > 0) {
-            // 初始绘制：将整轴宽度适配到可视区域的 55%，提供充足的呼吸感
+        if (fileName !== lastFileRef.current && layoutDuration > 0 && viewportWidth > 0 && fitZoom > 0) {
             setZoom(fitZoom * 0.55);
+            lastFileRef.current = fileName;
         }
     }, [fileName, layoutDuration, viewportWidth, fitZoom]); 
+
+    // 模式切换保护：当切换模式导致 layoutDuration 剧减时，确保当前缩放不会低于新模式的最小阈值
+    useEffect(() => {
+        if (zoom < minZoom) {
+            setZoom(minZoom);
+        }
+    }, [minZoom, zoom]);
 
     // Derived state
     const totalWidth = useMemo(() => {
@@ -798,15 +810,23 @@ const Timeline = ({
                 newRange.end = rTime;
             }
             
-            updateSegment(dragMode.idx, newRange, type);
+            // Dragging is ephemeral, skip history
+            updateSegment(dragMode.idx, newRange, type, true);
         }
     }, [isDragging, isScrubbing, dragMode, viewMode, scrollLeft, pixelToTime, virtualToRealTime, onSeek, duration, silenceSegments, pendingSegments, hasVideo, zoom, updateSegment]);
 
     const handleMouseUp = useCallback(() => {
+        if (dragMode && dragMode.list === 'silence') {
+            // Commit final position to history exactly once on release
+            const seg = silenceSegments[dragMode.idx];
+            if (seg) {
+                updateSegment(dragMode.idx, { start: seg.start, end: seg.end }, 'silence', false);
+            }
+        }
         setIsDragging(false);
         setIsScrubbing(false);
         setDragMode(null);
-    }, []);
+    }, [dragMode, silenceSegments, updateSegment]);
 
     // Handle Context Menu closing
     useEffect(() => {

@@ -39,51 +39,64 @@ export function useTimelineModel({
 
     const virtualDuration = useMemo(() => stats.remaining, [stats.remaining]);
 
+    // --- 渐进式重构：统一 Action 中心 ---
+    // 所有的修改都通过这个函数，并在此处存入历史记录
+    const pushState = useCallback((newSegments, isPending = false, skipHistory = false) => {
+        if (!isPending) {
+            // 只为已确认为 confirmed 的变更存入历史
+            setConfirmedSegments(newSegments, skipHistory);
+        } else {
+            setPendingSegments(newSegments);
+        }
+    }, [setConfirmedSegments, setPendingSegments]);
+
     // 4. 时间转换辅助函数 (闭包引用当前 mergedSilences)
     const realToVirtual = useCallback((t) => r2v(t, mergedSilences), [mergedSilences]);
     const virtualToReal = useCallback((t) => v2r(t, mergedSilences), [mergedSilences]);
 
-    // 5. 业务操作方法
+    // 5. 业务操作方法 - 保持 API 不变，内部改为调用 pushState
     
-    // 更新静音块 (手动调整边缘)
-    const updateSegment = useCallback((index, newRange, type = 'silence') => {
+    // 更新静音块 (包括 Edge Dragging)
+    const updateSegment = useCallback((index, newRange, type = 'silence', skipHistory = false) => {
         if (type === 'silence') {
             const next = [...confirmedSegments];
             next[index] = { ...next[index], ...newRange };
-            setConfirmedSegments(next);
+            pushState(next, false, skipHistory); 
         } else if (type === 'pending') {
             const next = [...pendingSegments];
             next[index] = { ...next[index], ...newRange };
-            setPendingSegments(next);
+            pushState(next, true, skipHistory);
         }
-    }, [confirmedSegments, setConfirmedSegments, pendingSegments, setPendingSegments]);
+    }, [confirmedSegments, pendingSegments, pushState]);
 
-    // 删除静音块 (人为修正探测结果)
+    // 删除静音块
     const deleteSegment = useCallback((index, type = 'silence') => {
         if (type === 'silence') {
-            setConfirmedSegments(prev => prev.filter((_, i) => i !== index));
+            const next = confirmedSegments.filter((_, i) => i !== index);
+            pushState(next);
         } else if (type === 'pending') {
-            setPendingSegments(prev => prev.filter((_, i) => i !== index));
+            const next = pendingSegments.filter((_, i) => i !== index);
+            pushState(next, true);
         }
-    }, [setConfirmedSegments, setPendingSegments]);
+    }, [confirmedSegments, pendingSegments, pushState]);
 
-    // 删除语音片段 (碎片化模式下的人为剔除)
+    // 删除语音片段 (碎片化模式下的人为剔除) - 核心：将其转为增加静音区
     const deleteSpeechClip = useCallback((clipIndex) => {
         const clip = speechClips[clipIndex];
         if (!clip) return;
         
-        // 逻辑：删除语音片段 = 将该片段对应的范围识别为静音区
+        // 关键：基于“非破坏”原则，删除片段 = 增加这一段的静音标记
         const newSilence = { start: clip.start, end: clip.end };
-        setConfirmedSegments(prev => [...prev, newSilence]);
-    }, [speechClips, setConfirmedSegments]);
+        pushState([...confirmedSegments, newSilence]);
+    }, [speechClips, confirmedSegments, pushState]);
 
     return {
         // Data
         stats,
         speechClips,
         virtualDuration,
-        confirmedSegments, // 添加导出
-        pendingSegments,   // 添加导出
+        confirmedSegments, 
+        pendingSegments,   
         
         // Helpers
         realToVirtual,
