@@ -74,7 +74,7 @@ const MainInterface = ({ appData, isTauri }) => {
         viewMode
     });
 
-    const { stats, speechClips } = timeline;
+    const { stats, speechClips, mergedSilences } = timeline;
 
     const handleUndo = useCallback(() => {
         if (history.length === 0) {
@@ -397,15 +397,18 @@ const MainInterface = ({ appData, isTauri }) => {
             // Determine the actual path the backend should use
             const inputPath = appData.state.currentVideoPath || currentFile.path;
             
-            // 导出始终使用 confirmedSegments (已经合并后的结果)
+            // 导出逻辑：
+            // 必须要发送“合并且排序后”的静音区间 (mergedSilences)
+            // 因为 Rust 后端会基于这些区间计算“需要保留的语音片段”
+            // 如果发送未排序的 confirmedSegments，后端处理逻辑会出错
             const request = {
                 inputPath: inputPath,
                 thresholdDb: 20 * Math.log10(threshold || 0.01),
-                minSilenceDuration: 0.8, // 逻辑已在前端处理，后端仅需路径和最终片段
-                segments: confirmedSegments.map(s => ({
-                    startTime: s.start || s.startTime || 0,
-                    endTime: s.end || s.endTime || 0,
-                    duration: (s.end || s.endTime || 0) - (s.start || s.startTime || 0),
+                minSilenceDuration: 0.8, 
+                segments: mergedSilences.map(s => ({
+                    startTime: s.start,
+                    endTime: s.end,
+                    duration: s.end - s.start,
                     averageDb: s.averageDb || -60.0
                 }))
             };

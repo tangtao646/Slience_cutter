@@ -62,7 +62,8 @@ const Timeline = ({
         virtualToReal: virtualToRealTime,
         updateSegment,
         deleteSegment,
-        deleteSpeechClip
+        deleteSpeechClip,
+        bulkDelete
     } = timeline;
 
     const silenceSegments = confirmedSegments; 
@@ -82,14 +83,15 @@ const Timeline = ({
     const [height, setHeight] = useState(0);
     const [isDragging, setIsDragging] = useState(false);
     const [isScrubbing, setIsScrubbing] = useState(false); 
-    const [selectedIdx, setSelectedIdx] = useState(-1);
+    const [selectedIndices, setSelectedIndices] = useState([]); // Array of indices for bulk operations
     const [selectedTrack, setSelectedTrack] = useState(null); 
     const [dragMode, setDragMode] = useState(null); 
+    const [selectionBox, setSelectionBox] = useState(null); // { x1, y1, x2, y2 } for box selection
     const [contextMenu, setContextMenu] = useState(null); 
 
     // Reset selection when file changes to avoid stale indices
     useEffect(() => {
-        setSelectedIdx(-1);
+        setSelectedIndices([]);
         setSelectedTrack(null);
     }, [fileName]); 
     
@@ -386,8 +388,8 @@ const Timeline = ({
                      const ex = timeToPixel(clip.virtualStart + clip.duration) - scrollLeft;
                      if (ex < 0 || sx > viewportWidth) return;
                      
-                     ctx.fillStyle = COLORS.videoTrackBg;
-                     const isSelected = selectedTrack === 'media' && selectedIdx === i;
+                     const isSelected = selectedTrack === 'media' && selectedIndices.includes(i);
+                     ctx.fillStyle = isSelected ? '#3e6b56' : COLORS.videoTrackBg;
                      ctx.strokeStyle = isSelected ? '#fff' : COLORS.videoTrackBorder;
                      ctx.lineWidth = isSelected ? 2 : 1;
                      roundRect(ctx, sx, videoY, ex - sx, videoH, 4);
@@ -443,8 +445,8 @@ const Timeline = ({
                     const ex = timeToPixel(clip.virtualStart + clip.duration) - scrollLeft;
                     if (ex < 0 || sx > viewportWidth) return;
                     
-                    ctx.fillStyle = COLORS.audioTrackBg;
-                    const isSelected = selectedTrack === 'media' && selectedIdx === i;
+                    const isSelected = selectedTrack === 'media' && selectedIndices.includes(i);
+                    ctx.fillStyle = isSelected ? '#4b5563' : COLORS.audioTrackBg;
                     ctx.strokeStyle = isSelected ? '#fff' : COLORS.audioTrackBorder;
                     ctx.lineWidth = isSelected ? 2 : 1;
                     roundRect(ctx, sx, audioY, ex - sx, audioH, 4);
@@ -464,7 +466,7 @@ const Timeline = ({
                     const ex = timeToPixel(s_end) - scrollLeft;
                     const rectW = ex - sx;
                     if (rectW > 0) {
-                        const isSelected = selectedTrack === 'silence' && selectedIdx === i;
+                        const isSelected = selectedTrack === 'silence' && selectedIndices.includes(i);
                         ctx.fillStyle = isSelected ? 'rgba(0, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.35)'; 
                         
                         // 仅在音频轨道区域绘制，避免在纯音频模式下出界
@@ -491,7 +493,7 @@ const Timeline = ({
                     const ex = timeToPixel(vEnd) - scrollLeft;
                     const rectW = ex - sx;
                     if (rectW > 0.5) {
-                        const isSelected = selectedTrack === 'pending' && selectedIdx === i;
+                        const isSelected = selectedTrack === 'pending' && selectedIndices.includes(i);
                         ctx.fillStyle = isSelected ? 'rgba(239, 68, 68, 0.6)' : 'rgba(239, 68, 68, 0.3)'; 
                         
                         // 仅在音频轨道区域绘制，保持视觉重点并防止出界
@@ -582,9 +584,9 @@ const Timeline = ({
         } catch (e) {
             console.error('Timeline draw error:', e);
         }
-    }, [zoom, scrollLeft, viewportWidth, height, dpr, duration, layoutDuration, speechClips, audioData, silenceSegments, pendingSegments, fileName, hasVideo, hasAudio, selectedIdx, selectedTrack, virtualToRealTime]);
+    }, [zoom, scrollLeft, viewportWidth, height, dpr, duration, layoutDuration, speechClips, audioData, silenceSegments, pendingSegments, fileName, hasVideo, hasAudio, selectedIndices, selectedTrack, virtualToRealTime]);
 
-    // Dynamic Layer (Playhead)
+    // Dynamic Layer (Playhead + Selection Box)
     const drawDynamic = useCallback(() => {
         const canvas = dynamicCanvasRef.current;
         if (!canvas) return;
@@ -595,6 +597,20 @@ const Timeline = ({
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.scale(dpr, dpr);
         
+        // Render Selection Box
+        if (selectionBox) {
+            const xMin = Math.min(selectionBox.x1, selectionBox.x2) - scrollLeft;
+            const xMax = Math.max(selectionBox.x1, selectionBox.x2) - scrollLeft;
+            const yMin = Math.min(selectionBox.y1, selectionBox.y2);
+            const yMax = Math.max(selectionBox.y1, selectionBox.y2);
+            
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.2)';
+            ctx.strokeStyle = '#60a5fa';
+            ctx.lineWidth = 1;
+            ctx.fillRect(xMin, yMin, xMax - xMin, yMax - yMin);
+            ctx.strokeRect(xMin, yMin, xMax - xMin, yMax - yMin);
+        }
+
         const rt = videoPlayer?.videoElement?.currentTime ?? currentTime ?? 0;
         const vt = realToVirtualTime(rt);
         const x = timeToPixel(vt) - scrollLeft;
@@ -614,7 +630,7 @@ const Timeline = ({
         }
         
         animationFrameRef.current = requestAnimationFrame(drawDynamic);
-    }, [videoPlayer, currentTime, realToVirtualTime, scrollLeft, viewportWidth, height, dpr, zoom, timeToPixel]);
+    }, [selectionBox, videoPlayer, currentTime, realToVirtualTime, scrollLeft, viewportWidth, height, dpr, zoom, timeToPixel]);
 
     useEffect(() => {
         if (!staticCanvasRef.current) return;
@@ -690,14 +706,14 @@ const Timeline = ({
                 // Edge hit testing
                 if (Math.abs(actualX - (sPos + scrollLeft)) < 8) {
                     setDragMode({ type: 'start', idx: i, list: 'pending' });
-                    setSelectedIdx(i);
+                    setSelectedIndices([i]);
                     setSelectedTrack('pending'); 
                     setIsDragging(true);
                     return;
                 }
                 if (Math.abs(actualX - (ePos + scrollLeft)) < 8) {
                     setDragMode({ type: 'end', idx: i, list: 'pending' });
-                    setSelectedIdx(i);
+                    setSelectedIndices([i]);
                     setSelectedTrack('pending');
                     setIsDragging(true);
                     return;
@@ -706,7 +722,7 @@ const Timeline = ({
                 // Body hit testing
                 if (rTime >= seg.start && rTime <= seg.end) {
                     setSelectedTrack('pending');
-                    setSelectedIdx(i);
+                    setSelectedIndices([i]);
                     setIsDragging(true);
                     return;
                 }
@@ -720,14 +736,14 @@ const Timeline = ({
                 
                 if (Math.abs(actualX - (sPos + scrollLeft)) < 8) {
                     setDragMode({ type: 'start', idx: i, list: 'silence' });
-                    setSelectedIdx(i);
+                    setSelectedIndices([i]);
                     setSelectedTrack('silence');
                     setIsDragging(true);
                     return;
                 }
                 if (Math.abs(actualX - (ePos + scrollLeft)) < 8) {
                     setDragMode({ type: 'end', idx: i, list: 'silence' });
-                    setSelectedIdx(i);
+                    setSelectedIndices([i]);
                     setSelectedTrack('silence');
                     setIsDragging(true);
                     return;
@@ -735,7 +751,7 @@ const Timeline = ({
 
                 if (rTime >= seg.start && rTime <= seg.end) {
                     setSelectedTrack('silence');
-                    setSelectedIdx(i);
+                    setSelectedIndices([i]);
                     setIsDragging(true);
                     return;
                 }
@@ -761,10 +777,16 @@ const Timeline = ({
             } else if (viewMode === 'fragmented' && speechClips) {
                 foundIdx = speechClips.findIndex(c => vTime >= c.virtualStart && vTime <= (c.virtualStart + c.duration));
             }
-            setSelectedIdx(foundIdx);
+            if (foundIdx !== -1) {
+                setSelectedIndices([foundIdx]);
+            } else {
+                setSelectedIndices([]);
+            }
         } else {
+            // Nothing hit -> Start Box Selection
             setSelectedTrack(null);
-            setSelectedIdx(-1);
+            setSelectedIndices([]);
+            setSelectionBox({ x1: actualX, y1: y, x2: actualX, y2: y });
         }
 
         setIsDragging(true);
@@ -799,6 +821,8 @@ const Timeline = ({
         
         if (isScrubbing) {
             onSeek && onSeek(Math.max(0, Math.min(rTime, duration)));
+        } else if (selectionBox) {
+            setSelectionBox(prev => ({ ...prev, x2: actualX, y2: y }));
         } else if (dragMode) {
             const isPending = dragMode.list === 'pending';
             const type = isPending ? 'pending' : 'silence';
@@ -813,9 +837,59 @@ const Timeline = ({
             // Dragging is ephemeral, skip history
             updateSegment(dragMode.idx, newRange, type, true);
         }
-    }, [isDragging, isScrubbing, dragMode, viewMode, scrollLeft, pixelToTime, virtualToRealTime, onSeek, duration, silenceSegments, pendingSegments, hasVideo, zoom, updateSegment]);
+    }, [isDragging, isScrubbing, selectionBox, dragMode, viewMode, scrollLeft, pixelToTime, virtualToRealTime, onSeek, duration, silenceSegments, pendingSegments, hasVideo, zoom, updateSegment]);
 
     const handleMouseUp = useCallback(() => {
+        if (selectionBox) {
+            // Calculate final selections based on box rectangle
+            const xMin = Math.min(selectionBox.x1, selectionBox.x2);
+            const xMax = Math.max(selectionBox.x1, selectionBox.x2);
+            
+            if (Math.abs(xMax - xMin) > 5) { // Minimum drag distance to trigger multi-select
+                const newIndices = [];
+                let trackType = null;
+
+                if (viewMode === 'fragmented') {
+                    trackType = 'media';
+                    speechClips.forEach((c, idx) => {
+                        const s = timeToPixel(c.virtualStart);
+                        const e = timeToPixel(c.virtualStart + c.duration);
+                        if (e > xMin && s < xMax) {
+                            newIndices.push(idx);
+                        }
+                    });
+                } else {
+                    // In continuous mode, check pending/silence
+                    // Priority to pending
+                    pendingSegments.forEach((s, idx) => {
+                        const startX = timeToPixel(s.start);
+                        const endX = timeToPixel(s.end);
+                        if (endX > xMin && startX < xMax) {
+                            newIndices.push(idx);
+                        }
+                    });
+                    if (newIndices.length > 0) {
+                        trackType = 'pending';
+                    } else {
+                        silenceSegments.forEach((s, idx) => {
+                            const startX = timeToPixel(s.start);
+                            const endX = timeToPixel(s.end);
+                            if (endX > xMin && startX < xMax) {
+                                newIndices.push(idx);
+                            }
+                        });
+                        if (newIndices.length > 0) trackType = 'silence';
+                    }
+                }
+
+                if (newIndices.length > 0) {
+                    setSelectedTrack(trackType);
+                    setSelectedIndices(newIndices);
+                }
+            }
+            setSelectionBox(null);
+        }
+
         if (dragMode && dragMode.list === 'silence') {
             // Commit final position to history exactly once on release
             const seg = silenceSegments[dragMode.idx];
@@ -826,7 +900,7 @@ const Timeline = ({
         setIsDragging(false);
         setIsScrubbing(false);
         setDragMode(null);
-    }, [dragMode, silenceSegments, updateSegment]);
+    }, [selectionBox, dragMode, viewMode, speechClips, pendingSegments, silenceSegments, timeToPixel, updateSegment]);
 
     // Handle Context Menu closing
     useEffect(() => {
@@ -841,29 +915,36 @@ const Timeline = ({
             // Ignore if user is typing in an input
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIdx !== -1) {
+            const isDel = e.key === 'Delete' || e.key === 'Backspace';
+            if (!isDel) return;
+
+            if (selectedIndices.length > 0) {
                 e.preventDefault();
                 if (selectedTrack === 'pending') {
-                    deleteSegment(selectedIdx, 'pending');
-                    setSelectedIdx(-1);
+                    bulkDelete(selectedIndices, 'pending');
+                    setSelectedIndices([]);
                 } else if (selectedTrack === 'silence') {
-                    deleteSegment(selectedIdx, 'silence');
-                    setSelectedIdx(-1);
+                    bulkDelete(selectedIndices, 'silence');
+                    setSelectedIndices([]);
+                } else if (selectedTrack === 'media') {
+                    if (viewMode === 'fragmented') {
+                        bulkDelete(selectedIndices, 'media');
+                    } else if (viewMode === 'continuous') {
+                        onDeleteMedia && onDeleteMedia();
+                    }
+                    setSelectedTrack(null);
+                    setSelectedIndices([]);
                 }
-            } else if ((e.key === 'Delete' || e.key === 'Backspace') && selectedTrack === 'media') {
+            } else if (selectedTrack === 'media') {
+                // In continuous mode, indices might be empty but track is media (whole track selected)
                 e.preventDefault();
-                if (viewMode === 'fragmented' && selectedIdx !== -1) {
-                    deleteSpeechClip(selectedIdx);
-                } else if (viewMode === 'continuous') {
-                    onDeleteMedia && onDeleteMedia();
-                }
+                onDeleteMedia && onDeleteMedia();
                 setSelectedTrack(null);
-                setSelectedIdx(-1);
             }
         };
         window.addEventListener('keydown', handleKeys);
         return () => window.removeEventListener('keydown', handleKeys);
-    }, [selectedIdx, selectedTrack, viewMode, deleteSegment, deleteSpeechClip]);
+    }, [selectedIndices, selectedTrack, viewMode, bulkDelete, onDeleteMedia]);
 
     // Zoom Handlers
     useEffect(() => {

@@ -84,16 +84,34 @@ export function useTimelineModel({
     const deleteSpeechClip = useCallback((clipIndex) => {
         const clip = speechClips[clipIndex];
         if (!clip) return;
-        
-        // 关键：基于“非破坏”原则，删除片段 = 增加这一段的静音标记
         const newSilence = { start: clip.start, end: clip.end };
         pushState([...confirmedSegments, newSilence]);
     }, [speechClips, confirmedSegments, pushState]);
+
+    // 批量删除方法
+    const bulkDelete = useCallback((indices, type) => {
+        if (!indices || indices.length === 0) return;
+        
+        if (type === 'media') {
+            const newSilences = indices
+                .map(idx => speechClips[idx])
+                .filter(Boolean)
+                .map(clip => ({ start: clip.start, end: clip.end }));
+            pushState([...confirmedSegments, ...newSilences]);
+        } else if (type === 'pending') {
+            const next = pendingSegments.filter((_, i) => !indices.includes(i));
+            pushState(next, true);
+        } else if (type === 'silence') {
+            const next = confirmedSegments.filter((_, i) => !indices.includes(i));
+            pushState(next, false);
+        }
+    }, [speechClips, confirmedSegments, pendingSegments, pushState]);
 
     return {
         // Data
         stats,
         speechClips,
+        mergedSilences,
         virtualDuration,
         confirmedSegments, 
         pendingSegments,   
@@ -105,6 +123,7 @@ export function useTimelineModel({
         // Actions
         updateSegment,
         deleteSegment,
-        deleteSpeechClip
+        deleteSpeechClip,
+        bulkDelete
     };
 }
