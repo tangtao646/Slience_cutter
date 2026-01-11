@@ -163,7 +163,7 @@ pub async fn extract_audio_streaming(
                 final_peaks.push(current_peak);
                 
                 // 累计 10 个峰值 (约 200ms) 发送一次，保证极速响应
-                if peaks.len() >= 10 {
+                if peaks.len() >= 100 {
                     let progress = if duration > 0.0 {
                         (total_samples as f64 / sample_rate as f64) / duration
                     } else {

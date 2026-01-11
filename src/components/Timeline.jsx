@@ -93,9 +93,15 @@ const Timeline = ({
         setSelectedTrack(null);
     }, [fileName]); 
     
+    // Layout Duration: In continuous mode, we show the full base (confirmed cut), 
+    // but pending segments are just overlays and shouldn't shrink the timeline width.
+    const layoutDuration = useMemo(() => {
+        return viewMode === 'continuous' ? (stats?.currentBase || duration) : virtualDuration;
+    }, [viewMode, stats?.currentBase, duration, virtualDuration]);
+
     // Calculate dynamic zoom limits
     const { minZoom, fitZoom } = useMemo(() => {
-        const safeDuration = virtualDuration > 0 ? virtualDuration : 1;
+        const safeDuration = layoutDuration > 0 ? layoutDuration : 1;
         const safeWidth = viewportWidth > 0 ? viewportWidth : 800;
         const fit = safeWidth / safeDuration;
         // Allow zooming out until the track takes up half the container width (0.5 * fit)
@@ -103,27 +109,27 @@ const Timeline = ({
             minZoom: Math.max(0.01, fit * 0.5), 
             fitZoom: fit 
         };
-    }, [virtualDuration, viewportWidth]);
+    }, [layoutDuration, viewportWidth]);
 
 
     // Initial Auto-fit
     useEffect(() => {
-        if (virtualDuration > 0 && viewportWidth > 0) {
+        if (layoutDuration > 0 && viewportWidth > 0) {
              setZoom(prev => {
                 // Only set if zoom is currently at default/fallback
                 if (prev === DEFAULT_ZOOM || !Number.isFinite(prev)) return minZoom;
                 return prev;
              });
         }
-    }, [minZoom, virtualDuration, viewportWidth]); 
+    }, [minZoom, layoutDuration, viewportWidth]); 
 
     // Derived state
     const totalWidth = useMemo(() => {
-        const d = Number.isFinite(virtualDuration) ? virtualDuration : 0;
+        const d = Number.isFinite(layoutDuration) ? layoutDuration : 0;
         const z = Number.isFinite(zoom) ? zoom : DEFAULT_ZOOM;
         const v = Number.isFinite(viewportWidth) ? viewportWidth : 0;
         return Math.max(v * 1.5, d * z);
-    }, [virtualDuration, zoom, viewportWidth]);
+    }, [layoutDuration, zoom, viewportWidth]);
     const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
 
     // Helper: Time <-> Pixel (These now operate on VIRTUAL time)
@@ -217,7 +223,7 @@ const Timeline = ({
             ctx.fillRect(0, 0, viewportWidth, height);
 
             // Ensure we have some valid width to draw and finite durations
-            if (!Number.isFinite(viewportWidth) || viewportWidth <= 0 || !Number.isFinite(virtualDuration) || virtualDuration <= 0) return;
+            if (!Number.isFinite(viewportWidth) || viewportWidth <= 0 || !Number.isFinite(layoutDuration) || layoutDuration <= 0) return;
 
             const startVirtualTime = pixelToTime(scrollLeft);
             const endVirtualTime = pixelToTime(scrollLeft + viewportWidth);
@@ -304,7 +310,7 @@ const Timeline = ({
 
         // --- TRACKS ---
         const drawX = timeToPixel(0) - scrollLeft;
-        const totalVW = timeToPixel(virtualDuration);
+        const totalVW = timeToPixel(layoutDuration);
         const endX = drawX + totalVW;
 
         if (endX < 0) return;
@@ -418,8 +424,66 @@ const Timeline = ({
                     ctx.stroke();
                 });
             }
+
+            // --- Overlays (Masks) Drawn Behind Waveform ---
+            // Silence Overlays (Only in Continuous Mode)
+            if (viewMode === 'continuous' && silenceSegments && silenceSegments.length > 0) {
+                silenceSegments.forEach((seg, i) => {
+                    const s_start = seg.startTime || seg.start;
+                    const s_end = seg.endTime || seg.end;
+                    if (s_end < startVirtualTime || s_start > endVirtualTime) return;
+                    const sx = timeToPixel(s_start) - scrollLeft;
+                    const ex = timeToPixel(s_end) - scrollLeft;
+                    const rectW = ex - sx;
+                    if (rectW > 0) {
+                        const isSelected = selectedTrack === 'silence' && selectedIdx === i;
+                        ctx.fillStyle = isSelected ? 'rgba(0, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.35)'; 
+                        
+                        // 仅覆盖视频和音频轨道区域，不遮挡刻度尺和外部区域
+                        ctx.fillRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                        
+                        if (isSelected) {
+                            ctx.strokeStyle = '#60a5fa';
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                        }
+                    }
+                });
+            }
+
+            // Pending Overlays (Active Detection)
+            if (pendingSegments && pendingSegments.length > 0) {
+                pendingSegments.forEach((seg, i) => {
+                    const s_start = seg.startTime || seg.start;
+                    const s_end = seg.endTime || seg.end;
+                    const vStart = realToVirtualTime(s_start);
+                    const vEnd = realToVirtualTime(s_end);
+                    if (vEnd < startVirtualTime || vStart > endVirtualTime) return;
+                    const sx = timeToPixel(vStart) - scrollLeft;
+                    const ex = timeToPixel(vEnd) - scrollLeft;
+                    const rectW = ex - sx;
+                    if (rectW > 0.5) {
+                        const isSelected = selectedTrack === 'pending' && selectedIdx === i;
+                        ctx.fillStyle = isSelected ? 'rgba(239, 68, 68, 0.6)' : 'rgba(239, 68, 68, 0.3)'; 
+                        
+                        // 仅覆盖轨道区域
+                        ctx.fillRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                        
+                        if (isSelected) {
+                            ctx.strokeStyle = '#ffffff';
+                            ctx.lineWidth = 2;
+                            ctx.strokeRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                        } else {
+                            // 非选中状态下使用极细且半透明的边框，减少视觉干扰
+                            ctx.strokeStyle = 'rgba(239, 68, 68, 0.4)';
+                            ctx.lineWidth = 1;
+                            ctx.strokeRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
+                        }
+                    }
+                });
+            }
             
-            // Waveform
+            // Waveform (Drawn ON TOP of masks)
              if (audioData && audioData.peaks) {
                 const peaks = audioData.peaks;
                 const peaksPerSec = 50; 
@@ -450,19 +514,18 @@ const Timeline = ({
                             const v1 = Math.abs(peaks[idx1]);
                             const val = v0 + (v1 - v0) * frac;
                             
-                            const h = Math.pow(val, 0.6) * waveHeight;
-                            if (h > 0.5) {
-                                ctx.moveTo(vX + 0.5, waveCenterY - h/2);
-                                ctx.lineTo(vX + 0.5, waveCenterY + h/2);
-                            }
+                            // 确保静音处也有一条直线（最小高度 1px），符合 PR 等软件的习惯
+                            const h = Math.max(1, Math.pow(val, 0.6) * waveHeight);
+                            ctx.moveTo(vX + 0.5, Math.floor(waveCenterY - h/2) + 0.5);
+                            ctx.lineTo(vX + 0.5, Math.floor(waveCenterY + h/2) + 0.5);
                         }
                     };
 
                     if (viewMode === 'continuous') {
-                        const activeEndX = Math.min(waveVisibleEndX, timeToPixel(loadedTime) - scrollLeft);
-                        for (let x = waveVisibleStartX; x <= activeEndX; x += 1) {
-                            const t = pixelToTime(x + scrollLeft);
-                            drawWaveAt(x, t);
+                        for (let x = waveVisibleStartX; x <= waveVisibleEndX; x += 1) {
+                            const vt = pixelToTime(x + scrollLeft);
+                            const rt = virtualToRealTime(vt);
+                            drawWaveAt(x, rt);
                         }
                     } else {
                         speechClips.forEach(clip => {
@@ -485,63 +548,13 @@ const Timeline = ({
                     ctx.restore();
                 }
             }
-            
-            // Track 3: Silence Overlays (Only in Continuous Mode)
-            // 渲染“已确认”的静音区 (Confirmed Baseline)
-            if (viewMode === 'continuous' && silenceSegments && silenceSegments.length > 0) {
-                silenceSegments.forEach((seg, i) => {
-                    const s_start = seg.startTime || seg.start;
-                    const s_end = seg.endTime || seg.end;
-                    if (s_end < startVirtualTime || s_start > endVirtualTime) return;
-                    const sx = timeToPixel(s_start) - scrollLeft;
-                    const ex = timeToPixel(s_end) - scrollLeft;
-                    const rectW = ex - sx;
-                    if (rectW > 0) {
-                        const isSelected = selectedTrack === 'silence' && selectedIdx === i;
-                        ctx.fillStyle = isSelected ? 'rgba(0, 0, 0, 0.7)' : 'rgba(0, 0, 0, 0.4)'; 
-                        ctx.fillRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
-                        if (isSelected) {
-                            ctx.strokeStyle = '#60a5fa';
-                            ctx.lineWidth = 2;
-                            ctx.strokeRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
-                        }
-                    }
-                });
-            }
-
-            // 渲染“待处理”的探测区 (Pending Active Layer)
-            if (pendingSegments && pendingSegments.length > 0) {
-                pendingSegments.forEach((seg, i) => {
-                    const s_start = seg.startTime || seg.start;
-                    const s_end = seg.endTime || seg.end;
-                    
-                    // 将真实时间转换为当前视图的虚拟时间
-                    const vStart = realToVirtualTime(s_start);
-                    const vEnd = realToVirtualTime(s_end);
-                    
-                    if (vEnd < startVirtualTime || vStart > endVirtualTime) return;
-                    
-                    const sx = timeToPixel(vStart) - scrollLeft;
-                    const ex = timeToPixel(vEnd) - scrollLeft;
-                    const rectW = ex - sx;
-                    
-                    if (rectW > 0.5) { // 只有在当前视图中可见的部分才绘制
-                        const isSelected = selectedTrack === 'pending' && selectedIdx === i;
-                        ctx.fillStyle = isSelected ? 'rgba(239, 68, 68, 0.7)' : 'rgba(239, 68, 68, 0.4)'; 
-                        ctx.fillRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
-                        
-                        ctx.strokeStyle = isSelected ? '#ffffff' : '#ef4444';
-                        ctx.lineWidth = isSelected ? 2 : 1;
-                        ctx.strokeRect(sx, videoY, rectW, videoH + TRACK_GAP + audioH);
-                    }
-                });
-            }
         }
+        
         ctx.restore();
         } catch (e) {
             console.error('Timeline draw error:', e);
         }
-    }, [zoom, scrollLeft, viewportWidth, height, dpr, duration, virtualDuration, speechClips, audioData, silenceSegments, pendingSegments, fileName, hasVideo, hasAudio, selectedIdx, selectedTrack]);
+    }, [zoom, scrollLeft, viewportWidth, height, dpr, duration, layoutDuration, speechClips, audioData, silenceSegments, pendingSegments, fileName, hasVideo, hasAudio, selectedIdx, selectedTrack, virtualToRealTime]);
 
     // Dynamic Layer (Playhead)
     const drawDynamic = useCallback(() => {
@@ -634,7 +647,7 @@ const Timeline = ({
 
         const videoY = TRACK_START_Y;
         const audioY = hasVideo ? (videoY + TRACK_HEIGHT + TRACK_GAP) : TRACK_START_Y;
-        const isWithinTimeRange = actualX >= 0 && actualX <= timeToPixel(virtualDuration);
+        const isWithinTimeRange = actualX >= 0 && actualX <= timeToPixel(layoutDuration);
         
         // --- PRIORITY 1: Silence Segments (The Red/Dark Overlays) ---
         // These should take precedence because they are "on top" visually
@@ -726,7 +739,7 @@ const Timeline = ({
         }
 
         setIsDragging(true);
-    }, [scrollLeft, pixelToTime, virtualToRealTime, realToVirtualTime, timeToPixel, onSeek, duration, virtualDuration, silenceSegments, pendingSegments, hasVideo, zoom, viewMode, speechClips]);
+    }, [scrollLeft, pixelToTime, virtualToRealTime, realToVirtualTime, timeToPixel, onSeek, duration, layoutDuration, silenceSegments, pendingSegments, hasVideo, zoom, viewMode, speechClips]);
 
     const handleMouseMove = useCallback((e) => {
         if (!scrollContainerRef.current) return;

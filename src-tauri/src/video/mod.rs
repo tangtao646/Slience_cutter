@@ -219,9 +219,9 @@ pub async fn remove_silence_from_video(
     let total_silence_removed: f64 = silences.iter().map(|s| s.duration).sum();
     let processed_duration = original_duration - total_silence_removed;
 
-    // 2. 准备并行任务
-    // 工业级标准优化：增大批次以减少 FFmpeg 启动开销 (50 个片段一组)
-    let segments_per_batch = 50;
+    // 工业级标准优化：根据片段总数动态调整批次大小，兼顾并发性能与进度反馈
+    // 原 50 会导致长视频中进度条长时间卡在 1%，现改为 10-20
+    let segments_per_batch = 10;
     let num_batches = (speech_segments.len() + segments_per_batch - 1) / segments_per_batch;
     
     // 设置并发上限，根据 CPU 核心数动态调整 (通常 4-8)
@@ -238,8 +238,8 @@ pub async fn remove_silence_from_video(
     
     if let Some(ref win) = window {
         let _ = win.emit("video-progress", serde_json::json!({
-            "percent": 1.0, 
-            "message": format!("正在启动并行渲染引擎 (共 {} 批次)...", num_batches),
+            "percent": 2.0, 
+            "message": format!("正在初始化并行渲染引擎 (共 {} 组)...", num_batches),
             "eta": 0.0
         }));
     }
@@ -259,6 +259,14 @@ pub async fn remove_silence_from_video(
 
         // 计算该批次的快速寻址起点：取该批第一个片段的 start
         let seek_start = batch_segments[0].start;
+
+        if let Some(ref win) = window {
+            let _ = win.emit("video-progress", serde_json::json!({
+                "percent": 2.0, 
+                "message": format!("正在提交并行转码任务: {}/{}", batch_idx + 1, num_batches),
+                "eta": 0.0
+            }));
+        }
 
         tasks.spawn(async move {
             let _permit = sem.acquire().await.map_err(|e| format!("Semaphore error: {}", e))?;
@@ -286,9 +294,12 @@ pub async fn remove_silence_from_video(
                         let remaining_batches = num_batches - completed;
                         let eta = avg_time_per_batch * remaining_batches as f64;
 
+                        // 进度从 2% 开始，到 92% 结束转码阶段
+                        let progress = 1.0 + (completed as f64 / num_batches as f64 * 90.0);
+
                         let _ = win.emit("video-progress", serde_json::json!({
-                            "percent": (completed as f64 / num_batches as f64 * 90.0), // 前 90% 给转码
-                            "message": format!("正在并行转码: 第 {}/{} 组已完成", completed, num_batches),
+                            "percent": progress,
+                            "message": format!("正在转码: 第 {}/{} 组已完成", completed, num_batches),
                             "eta": eta
                         }));
                     }
@@ -315,6 +326,13 @@ pub async fn remove_silence_from_video(
     }
     
     println!("并行任务全部完成，正在合并 {} 个片段...", completed);
+    if let Some(ref win) = window {
+        let _ = win.emit("video-progress", serde_json::json!({
+            "percent": 95.0, 
+            "message": "正在进行最后的无损合并...",
+            "eta": 1.0
+        }));
+    }
     let concat_file_path = temp_dir.join("list.txt");
     let mut concat_file = fs::File::create(&concat_file_path)?;
     for i in 0..num_batches {
