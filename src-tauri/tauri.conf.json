@@ -32,13 +32,15 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "externalBin": [
+      "binaries/ffmpeg",
+      "binaries/ffprobe"
     ]
   },
   "plugins": {
     "shell": {
-      "scope": [
-        { "name": "ffmpeg", "cmd": "ffmpeg", "sidecar": true, "args": true }
-      ]
+      "open": true
     },
     "fs": {},
     "dialog": null

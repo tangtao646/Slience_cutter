@@ -1,6 +1,7 @@
 // src-tauri/src/utils/mod.rs
 // 工具函数模块
 
+pub mod sidecar;
 use std::path::Path;
 use std::fs;
 use std::io;

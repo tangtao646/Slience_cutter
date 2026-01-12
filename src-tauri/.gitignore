@@ -2,3 +2,7 @@
 /target
 dist/
 *.lock
+
+# Tauri sidecars & build
+/src-tauri/binaries
+/src-tauri/target

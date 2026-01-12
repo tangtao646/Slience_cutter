@@ -198,15 +198,20 @@ const MainInterface = ({ appData, isTauri }) => {
 
             // 人性化处理：应用 Padding (留白)
             // 每一个静音区间的两头都要缩进一段距离，给说话留下呼吸感，避免“切到字”
+            // 注意：如果静音紧贴着视频开头或结尾，则不应在那个边界加 Padding，否则会导致结尾出现“幽灵片段”
             const processedSilences = rawSilences
                 .map(s => {
-                    const newStart = s.startTime + targetPadding;
-                    const newEnd = s.endTime - targetPadding;
+                    const isAtStart = s.startTime < 0.1;
+                    const isAtEnd = s.endTime > (videoDuration - 0.1);
+                    
+                    const newStart = isAtStart ? 0 : s.startTime + targetPadding;
+                    const newEnd = isAtEnd ? videoDuration : s.endTime - targetPadding;
+                    
                     return {
                         ...s,
                         startTime: newStart,
                         endTime: newEnd,
-                        duration: newEnd - newStart
+                        duration: Math.max(0, newEnd - newStart)
                     };
                 })
                 // 如果留白后静音区间消失了（太短了），则忽略该片段

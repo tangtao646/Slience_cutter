@@ -4,13 +4,15 @@
 use tauri::Manager;
 use std::io::{Read, Seek};
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool};
 use std::sync::Arc;
 
 // 应用状态
 #[derive(Default)]
 pub struct AppState {
     pub ffmpeg_available: bool,
+    pub ffmpeg_path: Option<std::path::PathBuf>,
+    pub ffprobe_path: Option<std::path::PathBuf>,
     pub processing_count: u32,
 }
 
@@ -30,9 +32,59 @@ impl Default for ExportState {
 pub fn run_app() -> tauri::Result<()> {
     let builder = tauri::Builder::default()
         .manage(ExportState::default())
+        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_log::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            log::info!("Silence Cutter 正在启动...");
+
+            // 获取 sidecar 路径
+            let mut ffmpeg_path = crate::utils::sidecar::get_sidecar_path(app.handle(), "ffmpeg").ok();
+            let mut ffprobe_path = crate::utils::sidecar::get_sidecar_path(app.handle(), "ffprobe").ok();
+            let mut is_sidecar = ffmpeg_path.is_some();
+            
+            // 如果 sidecar 不存在，尝试查找系统全局的
+            if ffmpeg_path.is_none() {
+                if let Ok(p) = which::which("ffmpeg") {
+                    ffmpeg_path = Some(p.to_string_lossy().to_string());
+                }
+            }
+            if ffprobe_path.is_none() {
+                if let Ok(p) = which::which("ffprobe") {
+                    ffprobe_path = Some(p.to_string_lossy().to_string());
+                }
+            }
+
+            let ffmpeg_available = ffmpeg_path.is_some() && ffprobe_path.is_some();
+            
+            if ffmpeg_available {
+                if is_sidecar {
+                    log::info!("✅ [Sidecar] 模式启动: {:?}", ffmpeg_path);
+                } else {
+                    log::info!("ℹ️ [System] 模式启动 (使用全局 FFmpeg): {:?}", ffmpeg_path);
+                }
+            } else {
+                log::error!("❌ 未找到任何 FFmpeg/FFprobe！应用功能将受限。");
+            }
+
+            app.manage(AppState {
+                ffmpeg_available,
+                ffmpeg_path: ffmpeg_path.map(std::path::PathBuf::from),
+                ffprobe_path: ffprobe_path.map(std::path::PathBuf::from),
+                processing_count: 0,
+            });
+
+            // 开发模式下打开开发者工具
+            #[cfg(debug_assertions)]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.open_devtools();
+                }
+            }
+            
+            Ok(())
+        })
         .register_uri_scheme_protocol("video-stream", move |_app, request| {
             let uri = request.uri().to_string();
             // 改进路径解析：移除协议头和主机名，适配多种 WebKit URI 格式
@@ -205,26 +257,6 @@ pub fn run_app() -> tauri::Result<()> {
                 .header("Access-Control-Allow-Headers", "Range, Accept-Encoding")
                 .body(buffer).unwrap()
         })
-        .setup(|app| {
-            // 初始化日志
-            log::info!("Silence Cutter 正在启动...");
-            
-            // 检查 FFmpeg
-            check_ffmpeg_availability();
-            
-            // 开发模式下打开开发者工具 (安全尝试)
-            #[cfg(debug_assertions)]
-            {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.open_devtools();
-                } else {
-                    log::warn!("无法找到主窗口以打开开发者工具");
-                }
-            }
-            
-            Ok(())
-        })
-        .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             crate::commands::test_connection,
             crate::commands::test_ffmpeg,
@@ -243,19 +275,3 @@ pub fn run_app() -> tauri::Result<()> {
     builder.run(tauri::generate_context!())
 }
 
-// 检查 FFmpeg 可用性
-fn check_ffmpeg_availability() {
-    use std::process::Command;
-    
-    match Command::new("ffmpeg").arg("-version").output() {
-        Ok(output) => {
-            let version = String::from_utf8_lossy(&output.stdout);
-            let first_line = version.lines().next().unwrap_or("未知版本");
-            log::info!("FFmpeg 检测到: {}", first_line);
-        }
-        Err(e) => {
-            log::warn!("FFmpeg 未找到: {}", e);
-            log::warn!("请安装 FFmpeg: https://ffmpeg.org/download.html");
-        }
-    }
-}

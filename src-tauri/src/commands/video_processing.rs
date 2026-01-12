@@ -7,7 +7,6 @@ use crate::app::ExportState;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 // 视频处理请求
 #[derive(Debug, Serialize, Deserialize)]
@@ -46,18 +45,34 @@ pub async fn cancel_export(state: tauri::State<'_, ExportState>) -> Result<(), S
 
 // 获取视频信息
 #[tauri::command]
-pub async fn get_video_info(path: String) -> Result<video::VideoInfo, String> {
-    let result: Result<video::VideoInfo, Box<dyn std::error::Error>> = video::get_video_info(&path).await;
+pub async fn get_video_info(
+    state: tauri::State<'_, crate::app::AppState>,
+    path: String
+) -> Result<video::VideoInfo, String> {
+    let ffprobe_path = state.ffprobe_path.as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "FFprobe not found".to_string())?;
+
+    let result: Result<video::VideoInfo, Box<dyn std::error::Error>> = video::get_video_info(&ffprobe_path, &path).await;
     result.map_err(|e| format!("获取视频信息失败: {}", e))
 }
 
 // 提取音频 (流式分析版)
 #[tauri::command]
 pub async fn extract_audio(
+    state: tauri::State<'_, crate::app::AppState>,
     path: String,
     sample_rate: Option<u32>,
     window: tauri::Window,
 ) -> Result<audio::AudioData, String> {
+    let ffmpeg_path = state.ffmpeg_path.as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "FFmpeg not found".to_string())?;
+    
+    let ffprobe_path = state.ffprobe_path.as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "FFprobe not found".to_string())?;
+
     let sample_rate = sample_rate.unwrap_or(16000);
     println!("开始流式提取音频: {}, 采样率: {}", path, sample_rate);
     
@@ -70,7 +85,7 @@ pub async fn extract_audio(
     }));
     
     // 调用我们在 audio/mod.rs 中定义的流式处理函数
-    let result = audio::extract_audio_streaming(&path, sample_rate, &window, -40.0).await;
+    let result = audio::extract_audio_streaming(&ffmpeg_path, &ffprobe_path, &path, sample_rate, &window, -40.0).await;
     
     result.map_err(|e| {
         println!("提取音频失败: {}", e);
@@ -109,13 +124,24 @@ pub async fn detect_silences(
 // 处理视频
 #[tauri::command]
 pub async fn process_video(
+    app_state: tauri::State<'_, crate::app::AppState>,
     request: VideoProcessRequest,
     window: tauri::Window,
     state: tauri::State<'_, ExportState>,
 ) -> Result<VideoProcessResponse, String> {
+    let ffmpeg_path = app_state.ffmpeg_path.as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "FFmpeg not found".to_string())?;
+    
+    let ffprobe_path = app_state.ffprobe_path.as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .ok_or_else(|| "FFprobe not found".to_string())?;
+
     // 重置取消标记
     state.is_cancelled.store(false, Ordering::SeqCst);
     
+    let start_time = std::time::Instant::now();
+
     // 生成输出路径
     let output_path = match request.output_path {
         Some(path) => path,
@@ -137,7 +163,7 @@ pub async fn process_video(
         segs
     } else {
         println!("未提供片段，开始从视频提取音频并检测...");
-        let result: Result<audio::AudioData, Box<dyn std::error::Error>> = audio::extract_audio_from_video(&request.input_path, sample_rate, Some(&window)).await;
+        let result: Result<audio::AudioData, Box<dyn std::error::Error>> = audio::extract_audio_from_video(&ffmpeg_path, &ffprobe_path, &request.input_path, sample_rate, Some(&window)).await;
         let audio_data = result.map_err(|e| {
             eprintln!("❌ 音频提取失败: {}", e);
             format!("音频提取失败: {}", e)
@@ -161,10 +187,11 @@ pub async fn process_video(
     println!("✅ 静音检测/获取完成: {} 个片段", silences.len());
     
     // 处理视频
-    let start_time = std::time::Instant::now();
     let cancel_signal = state.is_cancelled.clone();
     
     let video_result: Result<video::ProcessResult, Box<dyn std::error::Error>> = video::remove_silence_from_video(
+        &ffmpeg_path,
+        &ffprobe_path,
         &request.input_path,
         &output_path,
         &silences,

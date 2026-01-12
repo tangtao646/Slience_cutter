@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "setup": "node scripts/setup-sidecars.mjs",
+    "postinstall": "npm run setup",
+    "dev": "npm run setup && vite",
     "build": "vite build",
     "preview": "vite preview",
     "tauri": "tauri"

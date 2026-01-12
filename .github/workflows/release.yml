@@ -1,0 +1,92 @@
+name: "Release"
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest" # For M1/M2 (aarch64)
+            args: "--target aarch64-apple-darwin"
+            triple: "aarch64-apple-darwin"
+          - platform: "macos-latest" # For Intel (x86_64)
+            args: "--target x86_64-apple-darwin"
+            triple: "x86_64-apple-darwin"
+          - platform: "windows-latest"
+            args: ""
+            triple: "x86_64-pc-windows-msvc"
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: install frontend dependencies
+        run: npm install
+
+      - name: Download FFmpeg sidecars
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+          if [ "${{ matrix.platform }}" == "windows-latest" ]; then
+            # 使用 gyan.dev 的永久最新版链接，无需担心版本号变化
+            curl -L https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -o ffmpeg.zip
+            unzip -j ffmpeg.zip "**/ffmpeg.exe" -d src-tauri/binaries
+            unzip -j ffmpeg.zip "**/ffprobe.exe" -d src-tauri/binaries
+            mv src-tauri/binaries/ffmpeg.exe src-tauri/binaries/ffmpeg-${{ matrix.triple }}.exe
+            mv src-tauri/binaries/ffprobe.exe src-tauri/binaries/ffprobe-${{ matrix.triple }}.exe
+          elif [ "${{ matrix.triple }}" == "aarch64-apple-darwin" ]; then
+            # Download Mac ARM FFmpeg
+            curl -L https://www.osxexperts.net/ffmpeg80arm.zip -o ffmpeg.zip
+            curl -L https://www.osxexperts.net/ffprobe80arm.zip -o ffprobe.zip
+            unzip ffmpeg.zip -d src-tauri/binaries
+            unzip ffprobe.zip -d src-tauri/binaries
+            mv src-tauri/binaries/ffmpeg src-tauri/binaries/ffmpeg-${{ matrix.triple }}
+            mv src-tauri/binaries/ffprobe src-tauri/binaries/ffprobe-${{ matrix.triple }}
+            chmod +x src-tauri/binaries/ffmpeg-${{ matrix.triple }}
+            chmod +x src-tauri/binaries/ffprobe-${{ matrix.triple }}
+          else
+            # Download Mac x86_64 FFmpeg
+            curl -L https://www.osxexperts.net/ffmpeg80intel.zip -o ffmpeg.zip
+            curl -L https://www.osxexperts.net/ffprobe80intel.zip -o ffprobe.zip
+            unzip ffmpeg.zip -d src-tauri/binaries
+            unzip ffprobe.zip -d src-tauri/binaries
+            mv src-tauri/binaries/ffmpeg src-tauri/binaries/ffmpeg-${{ matrix.triple }}
+            mv src-tauri/binaries/ffprobe src-tauri/binaries/ffprobe-${{ matrix.triple }}
+            chmod +x src-tauri/binaries/ffmpeg-${{ matrix.triple }}
+            chmod +x src-tauri/binaries/ffprobe-${{ matrix.triple }}
+          fi
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__ # tauri-action replaces this with version from package.json
+          releaseName: "Silence Cutter v__VERSION__"
+          releaseBody: "See the assets below to download the latest version of Silence Cutter."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

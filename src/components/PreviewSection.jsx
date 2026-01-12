@@ -164,8 +164,7 @@ const PreviewSection = ({ appData, currentFile, onFileSelect, setFileInfo, setVi
             {!currentFile && (
                 <div className="preview-drop" role="button" onClick={handleBrowse}>
                     <div className="preview-drop-inner">
-                        <i className="fa fa-cloud-arrow-up fa-2x" aria-hidden="true"></i>
-                        <div className="preview-drop-title">Drop a File to Edit</div>
+                        <div className="preview-drop-title">Import a File to Edit</div>
                         <div className="preview-drop-sub">audio or video — click to browse</div>
                         <button className="browse-button" type="button" onClick={(e) => { e.stopPropagation(); handleBrowse(); }}>Browse</button>
                     </div>

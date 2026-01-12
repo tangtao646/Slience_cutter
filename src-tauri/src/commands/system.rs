@@ -18,8 +18,9 @@ pub struct SystemInfo {
 
 // 测试连接
 #[tauri::command]
-pub fn test_connection() -> Result<SystemInfo, String> {
-    let ffmpeg_info = check_ffmpeg();
+pub fn test_connection(state: tauri::State<'_, crate::app::AppState>) -> Result<SystemInfo, String> {
+    let ffmpeg_path = state.ffmpeg_path.as_ref().map(|p| p.to_string_lossy().to_string());
+    let ffmpeg_info = check_ffmpeg(ffmpeg_path);
     
     Ok(SystemInfo {
         app_name: "Silence Cutter".to_string(),
@@ -65,8 +66,9 @@ pub fn reveal_in_explorer(path: String) -> Result<(), String> {
 
 // 检查 FFmpeg
 #[tauri::command]
-pub fn test_ffmpeg() -> Result<FfmpegInfo, String> {
-    let info = check_ffmpeg();
+pub fn test_ffmpeg(state: tauri::State<'_, crate::app::AppState>) -> Result<FfmpegInfo, String> {
+    let ffmpeg_path = state.ffmpeg_path.as_ref().map(|p| p.to_string_lossy().to_string());
+    let info = check_ffmpeg(ffmpeg_path);
     Ok(info)
 }
 
@@ -79,41 +81,11 @@ pub struct FfmpegInfo {
     pub message: String,
 }
 
-fn check_ffmpeg() -> FfmpegInfo {
-    // 首先尝试找到 ffmpeg 路径
-    let mut ffmpeg_path = None;
-    
-    #[cfg(target_os = "macos")]
-    {
-        let possible_paths = [
-            "/usr/local/bin/ffmpeg",
-            "/opt/homebrew/bin/ffmpeg",
-            "/usr/bin/ffmpeg",
-        ];
-        
-        for path in possible_paths.iter() {
-            if std::path::Path::new(path).exists() {
-                ffmpeg_path = Some(path.to_string());
-                break;
-            }
-        }
-    }
-    
-    #[cfg(target_os = "windows")]
-    {
-        // Windows 下在 PATH 中查找
-        ffmpeg_path = which::which("ffmpeg")
-            .ok()
-            .and_then(|p| p.to_str().map(|s| s.to_string()));
-    }
-    
-    #[cfg(target_os = "linux")]
-    {
-        ffmpeg_path = Some("/usr/bin/ffmpeg".to_string());
-    }
+fn check_ffmpeg(ffmpeg_path: Option<String>) -> FfmpegInfo {
+    let path_to_run = ffmpeg_path.clone().unwrap_or_else(|| "ffmpeg".to_string());
     
     // 执行 ffmpeg 命令
-    match Command::new("ffmpeg").arg("-version").output() {
+    match Command::new(&path_to_run).arg("-version").output() {
         Ok(output) => {
             let output_str = String::from_utf8_lossy(&output.stdout);
             let first_line = output_str.lines().next().unwrap_or("");

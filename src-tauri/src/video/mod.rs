@@ -53,9 +53,9 @@ pub struct ProcessResult {
 pub type ProgressCallback = Box<dyn Fn(f64) + Send>;
 
 // 获取视频信息
-pub async fn get_video_info(video_path: &str) -> Result<VideoInfo, Box<dyn std::error::Error>> {
+pub async fn get_video_info(ffprobe_path: &str, video_path: &str) -> Result<VideoInfo, Box<dyn std::error::Error>> {
     // 使用 ffprobe 获取 JSON 格式信息
-    let mut cmd = TokioCommand::new("ffprobe");
+    let mut cmd = TokioCommand::new(ffprobe_path);
     cmd.args(&[
             "-v", "quiet",
             "-print_format", "json",
@@ -159,6 +159,8 @@ struct SpeechSegment {
 
 // 从视频移除静音 (加速并行版)
 pub async fn remove_silence_from_video(
+    ffmpeg_path: &str,
+    ffprobe_path: &str,
     input_path: &str,
     output_path: &str,
     silences: &[SilenceSegment],
@@ -176,7 +178,7 @@ pub async fn remove_silence_from_video(
     }
 
     // 获取原始信息
-    let video_info = get_video_info(input_path).await?;
+    let video_info = get_video_info(ffprobe_path, input_path).await?;
     let original_duration = video_info.duration;
 
     if let Some(ref win) = window {
@@ -206,14 +208,29 @@ pub async fn remove_silence_from_video(
     // 1. 计算所有需要保留的“说话片段” (Speech Segments)
     let mut speech_segments = Vec::new();
     let mut last_end = 0.0;
+    
+    // 增加一个小于 0.1s 的容差，避免各种浮点数精度或 ffprobe 误差导致的“幽灵尾巴”
+    let timestamp_tolerance = 0.05;
+
     for silence in silences {
-        if silence.start_time > last_end + 0.01 {
+        // 如果当前静音开始时间远大于上一个结束时间，说明中间有一段说话
+        if silence.start_time > last_end + timestamp_tolerance {
             speech_segments.push(SpeechSegment { start: last_end, end: silence.start_time });
         }
         last_end = silence.end_time;
     }
-    if last_end < original_duration - 0.01 {
+
+    // 处理最后一段说话（直到视频结束）
+    // 特别注意：如果最后一段太短（比如小于 0.1s），通常是 ffprobe 时长的误差，应该直接忽略
+    if last_end < original_duration - 0.1 {
         speech_segments.push(SpeechSegment { start: last_end, end: original_duration });
+    }
+
+    // 再次过滤：删除任何由于逻辑计算产生的极短片段（小于一个 GOB 或一帧的量级）
+    speech_segments.retain(|s| (s.end - s.start) > 0.05);
+
+    if speech_segments.is_empty() {
+        return Err("剪辑完成后没有剩余有效片段".into());
     }
 
     let total_silence_removed: f64 = silences.iter().map(|s| s.duration).sum();
@@ -247,6 +264,7 @@ pub async fn remove_silence_from_video(
     let mut tasks = tokio::task::JoinSet::new();
     let start_processing_time = std::time::Instant::now();
 
+    let ffmpeg_path_str = ffmpeg_path.to_string();
     for batch_idx in 0..num_batches {
         let start_idx = batch_idx * segments_per_batch;
         let end_idx = (start_idx + segments_per_batch).min(speech_segments.len());
@@ -257,6 +275,7 @@ pub async fn remove_silence_from_video(
         let has_video = video_info.has_video;
         let sem = semaphore.clone();
         let original_bitrate = video_info.bitrate;
+        let ffmpeg_cmd = ffmpeg_path_str.clone();
 
         // 计算该批次的快速寻址起点：取该批第一个片段的 start
         let seek_start = batch_segments[0].start;
@@ -272,6 +291,7 @@ pub async fn remove_silence_from_video(
         tasks.spawn(async move {
             let _permit = sem.acquire().await.map_err(|e| format!("Semaphore error: {}", e))?;
             process_batch_to_ts(
+                &ffmpeg_cmd,
                 &input, 
                 batch_output.to_str().unwrap(), 
                 &batch_segments, 
@@ -349,7 +369,7 @@ pub async fn remove_silence_from_video(
     }
     concat_file.flush()?;
 
-    let mut concat_cmd = TokioCommand::new("ffmpeg");
+    let mut concat_cmd = TokioCommand::new(ffmpeg_path);
     concat_cmd.args(&[
         "-f", "concat",
         "-safe", "0",
@@ -390,6 +410,7 @@ pub async fn remove_silence_from_video(
 
 // 内部函数：处理一个批次的片段到一个 TS 文件
 async fn process_batch_to_ts(
+    ffmpeg_path: &str,
     input: &str,
     output: &str,
     segments: &[SpeechSegment],
@@ -404,13 +425,13 @@ async fn process_batch_to_ts(
     for (i, seg) in segments.iter().enumerate() {
         // 关键点：时间必须减去 seek_start 的偏移量
         let s = (seg.start - seek_start).max(0.0);
-        let e = (seg.end - seek_start).max(0.0);
+        let duration = (seg.end - seg.start).max(0.0);
 
         if has_video {
-            filter.push_str(&format!("[0:v]trim=start={:.3}:end={:.3},setpts=PTS-STARTPTS[v{}];", s, e, i));
+            filter.push_str(&format!("[0:v]trim=start={:.3}:duration={:.3},setpts=PTS-STARTPTS[v{}];", s, duration, i));
             v_concat.push_str(&format!("[v{}]", i));
         }
-        filter.push_str(&format!("[0:a]atrim=start={:.3}:end={:.3},asetpts=PTS-STARTPTS[a{}];", s, e, i));
+        filter.push_str(&format!("[0:a]atrim=start={:.3}:duration={:.3},asetpts=PTS-STARTPTS[a{}];", s, duration, i));
         a_concat.push_str(&format!("[a{}]", i));
     }
 
@@ -419,7 +440,7 @@ async fn process_batch_to_ts(
     }
     filter.push_str(&format!("{}concat=n={}:v=0:a=1[fa]", a_concat, segments.len()));
 
-    let mut cmd = TokioCommand::new("ffmpeg");
+    let mut cmd = TokioCommand::new(ffmpeg_path);
     
     // 关键优化：在前置位放置 -ss，利用 FFmpeg 的快速跳转能力 (Fast Input Seeking)
     cmd.args(&["-nostdin", "-ss", &seek_start.to_string(), "-i", input]);

@@ -7,3 +7,6 @@ pnpm-lock.yaml
 .vscode
 .env
 .env.local
+# Tauri Binaries
+/src-tauri/binaries
+/src-tauri/target

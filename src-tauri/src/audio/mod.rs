@@ -37,8 +37,8 @@ fn parse_time(time_str: &str) -> Result<f64, Box<dyn std::error::Error>> {
 }
 
 // 获取视频时长
-fn get_video_duration(video_path: &str) -> Result<f64, Box<dyn std::error::Error>> {
-    let output = Command::new("ffprobe")
+fn get_video_duration(ffprobe_path: &str, video_path: &str) -> Result<f64, Box<dyn std::error::Error>> {
+    let output = Command::new(ffprobe_path)
         .args(&["-v", "error"])
         .args(&["-show_entries", "format=duration"])
         .args(&["-of", "default=noprint_wrappers=1:nokey=1"])
@@ -92,6 +92,8 @@ impl SilenceSegment {
 
 // 从视频流式提取音频并实时分析
 pub async fn extract_audio_streaming(
+    ffmpeg_path: &str,
+    ffprobe_path: &str,
     video_path: &str,
     sample_rate: u32,
     window: &tauri::Window,
@@ -101,10 +103,10 @@ pub async fn extract_audio_streaming(
     use std::io::Read;
     use tauri::Emitter;
 
-    let duration = get_video_duration(video_path).unwrap_or(0.0);
+    let duration = get_video_duration(ffprobe_path, video_path).unwrap_or(0.0);
     
     // FFmpeg 命令：直接输出原始 PCM 数据到 stdout
-    let mut child = Command::new("ffmpeg")
+    let mut child = Command::new(ffmpeg_path)
         .args(&["-i", video_path])
         .args(&["-vn"])
         .args(&["-ac", "1"])
@@ -162,13 +164,15 @@ pub async fn extract_audio_streaming(
                 peaks.push(current_peak);
                 final_peaks.push(current_peak);
                 
-                // 累计 10 个峰值 (约 200ms) 发送一次，保证极速响应
+                // 累计 100 个峰值 (约 2 秒) 发送一次，保证极致性能与响应
                 if peaks.len() >= 100 {
-                    let progress = if duration > 0.0 {
+                    let mut progress = if duration > 0.0 {
                         (total_samples as f64 / sample_rate as f64) / duration
                     } else {
                         0.0
                     };
+                    
+                    if progress > 1.0 { progress = 1.0; }
                     
                     let _ = window.emit("audio-waveform-step", serde_json::json!({
                         "peaks": peaks,
@@ -224,6 +228,8 @@ pub async fn extract_audio_streaming(
 
 // 从视频提取音频
 pub async fn extract_audio_from_video(
+    ffmpeg_path: &str,
+    ffprobe_path: &str,
     video_path: &str,
     sample_rate: u32,
     window: Option<&tauri::Window>,
@@ -240,11 +246,11 @@ pub async fn extract_audio_from_video(
     println!("提取音频到临时文件: {}", temp_wav_path);
     
     // 先获取视频时长
-    let duration = get_video_duration(video_path)?;
+    let duration = get_video_duration(ffprobe_path, video_path)?;
     println!("视频时长: {:.2}s", duration);
     
     // 使用 ffmpeg 提取音频为 WAV（带进度输出）
-    let mut child = Command::new("ffmpeg")
+    let mut child = Command::new(ffmpeg_path)
         .args(&["-i", video_path])
         .args(&["-vn"])                     // 无视频
         .args(&["-ac", "1"])                // 单声道
@@ -312,7 +318,7 @@ pub async fn extract_audio_from_video(
     println!("音频提取成功");
     
     // 获取音频信息
-    let duration = get_audio_duration(temp_wav_path)?;
+    let duration = get_audio_duration(ffprobe_path, temp_wav_path)?;
     let file_size = fs::metadata(temp_wav_path)?.len();
     
     println!("音频时长: {:.2}s, 文件大小: {} bytes", duration, file_size);
@@ -448,8 +454,8 @@ fn read_wav_file(wav_path: &str, expected_sample_rate: u32) -> Result<Vec<f32>, 
 }
 
 // 获取音频时长
-fn get_audio_duration(wav_path: &str) -> Result<f64, Box<dyn std::error::Error>> {
-    let output = Command::new("ffprobe")
+fn get_audio_duration(ffprobe_path: &str, wav_path: &str) -> Result<f64, Box<dyn std::error::Error>> {
+    let output = Command::new(ffprobe_path)
         .args(&["-v", "error"])
         .args(&["-show_entries", "format=duration"])
         .args(&["-of", "default=noprint_wrappers=1:nokey=1"])
