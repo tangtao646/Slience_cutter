@@ -451,16 +451,24 @@ const MainInterface = ({ appData, isTauri }) => {
         await appData.tauri.cancelExport();
     };
 
-    // 监听片段状态：如果所有片段都被删完了（在切片模式下），重置策略档位
+    // 监听项目状态：如果所有片段都被删完了（在切片模式下），重置面板档位并停止播放
     useEffect(() => {
-        if (currentFile && viewMode === 'fragmented' && stats.remaining <= 0.001 && confirmedSegments.length > 0) {
-            // 当所有语音都被“删没”了，此时的档位策略已失去意义，重置 UI 到初始 Natural 状态
-            // 这也有助于用户重新开始分析，避免逻辑冲突
-            setIntensity(0.25);
-            setCommittedIntensity(0);
-            setWaveInfo('片段已空，档位已重置');
+        if (currentFile && viewMode === 'fragmented' && stats.remaining <= 0.005) {
+            // 1. 强行停止播放器，防止在无内容的轨道上继续“空转”
+            if (appData.videoPlayer) {
+                appData.videoPlayer.pause();
+                appData.videoPlayer.seekTo(0);
+            }
+
+            // 2. 当内容删光时，重置右侧面板档位以便用户可以从低档位重新开始尝试
+            if (committedIntensity !== 0) {
+                console.log('[MainInterface] Content empty, resetting intensity.');
+                setIntensity(0.25);
+                setCommittedIntensity(0);
+                setWaveInfo('内容已清空，播放已停止，档位已重置。');
+            }
         }
-    }, [currentFile, viewMode, stats.remaining, confirmedSegments.length]);
+    }, [currentFile, viewMode, stats.remaining, committedIntensity, appData.videoPlayer]);
 
     // 监听后端进度
     useEffect(() => {
@@ -497,19 +505,31 @@ const MainInterface = ({ appData, isTauri }) => {
 
         const handleTimeUpdate = (currentTime) => {
             // 只有在预览模式下且有已确认片段时才跳过
-            if (viewMode !== 'fragmented' || !confirmedSegments || confirmedSegments.length === 0) return;
+            if (viewMode !== 'fragmented' || !mergedSilences || mergedSilences.length === 0) return;
 
             // 检查当前时间是否落入任何已确定的静音区间
-            const silSeg = confirmedSegments.find(seg => currentTime >= (seg.start - 0.05) && currentTime < (seg.end - 0.01));
+            // 使用已经排好序并合并过的 mergedSilences 以确保逻辑严密
+            const silSeg = mergedSilences.find(seg => currentTime >= (seg.start - 0.05) && currentTime < (seg.end - 0.01));
             
             if (silSeg) {
-                appData.videoPlayer.seekTo(silSeg.end);
+                // 关键逻辑：如果这个静音段是最后的结尾（即后面没有语音了）
+                // 这种情况下不能向后跳（会跳到视频尽头导致黑屏或幻灯片继续），而应该定格在静音段的起点
+                const isTrailingSilence = silSeg.end >= (videoDuration - 0.1);
+                
+                if (isTrailingSilence) {
+                    appData.videoPlayer.pause();
+                    appData.videoPlayer.seekTo(silSeg.start);
+                    setWaveInfo('播放已送达最后一个有效片段');
+                } else {
+                    // 如果后面还有话，则正常闪现跳过
+                    appData.videoPlayer.seekTo(silSeg.end);
+                }
             }
         };
 
         appData.videoPlayer.on('timeupdate', handleTimeUpdate);
         return () => appData.videoPlayer.off('timeupdate', handleTimeUpdate);
-    }, [viewMode, confirmedSegments, appData.videoPlayer]);
+    }, [viewMode, mergedSilences, videoDuration, appData.videoPlayer]);
 
     const handleDeleteTrack = (type) => {
         if (type === 'media') {
