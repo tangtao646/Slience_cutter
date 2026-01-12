@@ -1,7 +1,6 @@
 import React from 'react';
 import IntensitySlider from './IntensitySlider';
 import ThresholdSlider from './ThresholdSlider';
-import PaddingSlider from './PaddingSlider';
 
 const RightPanel = ({ 
     appData, 
@@ -13,8 +12,6 @@ const RightPanel = ({
     setIntensity, 
     threshold, 
     setThreshold, 
-    padding,
-    setPadding,
     isAutoThreshold,
     setIsAutoThreshold,
     committedIntensity,
@@ -98,11 +95,6 @@ const RightPanel = ({
                     setThreshold={setThreshold} 
                     isAuto={isAutoThreshold}
                     setIsAuto={setIsAutoThreshold}
-                />
-
-                <PaddingSlider 
-                    padding={padding} 
-                    setPadding={setPadding} 
                 />
 
             </div>

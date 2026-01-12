@@ -30,7 +30,13 @@ const ThresholdSlider = ({ threshold, setThreshold, isAuto, setIsAuto }) => {
                         <input 
                             type="checkbox" 
                             checked={isAuto} 
-                            onChange={(e) => setIsAuto(e.target.checked)}
+                            onChange={(e) => {
+                                const checked = e.target.checked;
+                                setIsAuto(checked);
+                                if (checked) {
+                                    setThreshold(0.015); // Auto 模式下重置到默认阈值
+                                }
+                            }}
                             style={{ width: '12px', height: '12px' }}
                         />
                         AUTO

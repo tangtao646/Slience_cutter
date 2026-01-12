@@ -160,26 +160,26 @@ const MainInterface = ({ appData, isTauri }) => {
         // 映射逻辑：档位越高，探测越激进 (minSilence 越小)，留白越少 (padding 越小)
         
         let minSilenceDuration = 0.8;
-        let targetPadding = padding;
+        let targetPadding = 0.25;
 
         if (targetIntensity <= 0.25) {
             // Linear between None(3.0) and Natural(0.8)
             const ratio = targetIntensity / 0.25;
             minSilenceDuration = 3.0 - (2.2 * ratio);
-            targetPadding = 0.5 - (0.25 * ratio);
+            targetPadding = 0.5 - (0.25 * ratio); // Natural(0.25 intensity) -> 0.25s padding
         } else if (targetIntensity <= 0.5) {
             // Linear between Natural(0.8) and Fast(0.5)
             const ratio = (targetIntensity - 0.25) / 0.25;
             minSilenceDuration = 0.8 - (0.3 * ratio);
-            targetPadding = 0.25 - (0.1 * ratio);
+            targetPadding = 0.25 - (0.1 * ratio); // Fast(0.5 intensity) -> 0.15s padding
         } else {
             // Linear between Fast(0.5) and Super(0.2)
             const ratio = (targetIntensity - 0.5) / 0.5;
             minSilenceDuration = 0.5 - (0.3 * ratio);
-            targetPadding = 0.15 - (0.1 * ratio);
+            targetPadding = 0.15 - (0.1 * ratio); // Super(1.0 intensity) -> 0.05s padding
         }
 
-        // 仅同步策略参数，Threshold 完全独立管理
+        // 核心改动：自动同步 Padding 状态，不再提供 UI 调节
         setPadding(targetPadding);
 
         console.log(`[MainInterface] Starting analysis: Intensity=${targetIntensity.toFixed(2)}, minDur=${minSilenceDuration.toFixed(2)}s, threshold=${threshold.toFixed(3)} (Auto=${isAutoThreshold})`);
@@ -621,8 +621,6 @@ const MainInterface = ({ appData, isTauri }) => {
                                 setThreshold={setThreshold}
                                 isAutoThreshold={isAutoThreshold}
                                 setIsAutoThreshold={setIsAutoThreshold}
-                                padding={padding}
-                                setPadding={setPadding}
                                 stats={stats}
                                 committedIntensity={committedIntensity}
                                 exportEnabled={exportEnabled}
