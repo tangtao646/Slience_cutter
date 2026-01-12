@@ -34,10 +34,7 @@ const RightPanel = ({
                     <i className="fa fa-scissors"></i>
                     <span>Silence</span>
                 </div>
-                <div className="panel-tab">
-                    <i className="fa fa-list"></i>
-                    <span>Sections</span>
-                </div>
+                
                 <div 
                     className={`panel-tab ${viewMode === 'fragmented' ? 'export-ready' : ''}`}
                     onClick={viewMode === 'fragmented' ? onExport : undefined}

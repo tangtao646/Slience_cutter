@@ -237,6 +237,7 @@ pub fn run_app() -> tauri::Result<()> {
             crate::commands::upload_chunk,
             crate::commands::finish_upload,
             crate::commands::batch_process,
+            crate::commands::reveal_in_explorer,
         ]);
     
     builder.run(tauri::generate_context!())

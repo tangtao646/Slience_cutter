@@ -256,6 +256,7 @@ pub async fn remove_silence_from_video(
         let batch_output = temp_dir.join(format!("part_{}.ts", batch_idx));
         let has_video = video_info.has_video;
         let sem = semaphore.clone();
+        let original_bitrate = video_info.bitrate;
 
         // 计算该批次的快速寻址起点：取该批第一个片段的 start
         let seek_start = batch_segments[0].start;
@@ -270,7 +271,14 @@ pub async fn remove_silence_from_video(
 
         tasks.spawn(async move {
             let _permit = sem.acquire().await.map_err(|e| format!("Semaphore error: {}", e))?;
-            process_batch_to_ts(&input, batch_output.to_str().unwrap(), &batch_segments, has_video, seek_start).await
+            process_batch_to_ts(
+                &input, 
+                batch_output.to_str().unwrap(), 
+                &batch_segments, 
+                has_video, 
+                seek_start,
+                original_bitrate
+            ).await
         });
     }
 
@@ -386,7 +394,8 @@ async fn process_batch_to_ts(
     output: &str,
     segments: &[SpeechSegment],
     has_video: bool,
-    seek_start: f64 // 关键：输入跳转时间
+    seek_start: f64,
+    original_bitrate: Option<u64>
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut filter = String::new();
     let mut v_concat = String::new();
@@ -418,11 +427,37 @@ async fn process_batch_to_ts(
     
     if has_video {
         cmd.args(&["-map", "[fv]"]);
+
+        // 行业标准：比特率控制逻辑
+        // 如果能获取到原始比特率，则作为目标比特率，否则使用 5000k 兜底
+        let v_bitrate = match original_bitrate {
+            Some(b) if b > 0 => {
+                // 减去音频估算 (128kbps)，确保总比特率不超标
+                let calc = b.saturating_sub(128_000);
+                // 设定上下限：最低 1M 保证感官，最高 15M 防止异常大文件
+                let kbps = (calc / 1000).clamp(1000, 15000);
+                format!("{}k", kbps)
+            },
+            _ => "5000k".to_string(),
+        };
+
         if cfg!(target_os = "macos") {
-            // 对片段转码使用较低质量/更快速率，因为最终只是中间件
-            cmd.args(&["-c:v", "h264_videotoolbox", "-b:v", "5000k"]); 
+            // macOS 使用硬件加速，并严格遵循原视频比特率
+            cmd.args(&[
+                "-c:v", "h264_videotoolbox", 
+                "-b:v", &v_bitrate,
+                "-profile:v", "high",
+                "-realtime", "true" 
+            ]); 
         } else {
-            cmd.args(&["-c:v", "libx264", "-preset", "ultrafast"]);
+            // 其他平台使用 libx264，采用 CRF 保证质量 + maxrate 限制体积膨胀
+            cmd.args(&[
+                "-c:v", "libx264", 
+                "-crf", "23",
+                "-maxrate", &v_bitrate,
+                "-bufsize", &format!("{}k", v_bitrate.trim_end_matches('k').parse::<u64>().unwrap_or(5000) * 2),
+                "-preset", "superfast"
+            ]);
         }
     }
 

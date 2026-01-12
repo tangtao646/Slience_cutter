@@ -142,6 +142,15 @@ export class TauriManager {
         }
     }
 
+    async revealInExplorer(path) {
+        if (!this.isTauri || !path) return;
+        try {
+            return await this.invoke('reveal_in_explorer', { path });
+        } catch (error) {
+            console.error('[TauriManager] revealInExplorer error:', error);
+        }
+    }
+
     mockInvoke(command, args) {
         console.log(`[MOCK] ${command}`, args);
         if (command === 'test_connection') return { version: '0.1.0-mock' };

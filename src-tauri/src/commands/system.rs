@@ -32,6 +32,37 @@ pub fn test_connection() -> Result<SystemInfo, String> {
     })
 }
 
+#[tauri::command]
+pub fn reveal_in_explorer(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .args(["/select,", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .args(["-R", &path])
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let path = std::path::Path::new(&path);
+        let folder = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+        Command::new("xdg-open")
+            .arg(folder)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
 // 检查 FFmpeg
 #[tauri::command]
 pub fn test_ffmpeg() -> Result<FfmpegInfo, String> {

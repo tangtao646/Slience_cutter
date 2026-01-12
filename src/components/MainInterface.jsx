@@ -422,6 +422,11 @@ const MainInterface = ({ appData, isTauri }) => {
                 await message(`文件已保存至：\n${result.outputPath}`, { 
                     title: '导出成功'
                 });
+                
+                // 成功关闭对话框后，自动打开所在文件夹并选中文件 (reveal)
+                if (result.outputPath) {
+                    await appData.tauri.revealInExplorer(result.outputPath);
+                }
             } else if (result && result.cancelled) {
                 console.log('Export detected as cancelled');
                 setWaveInfo('导出已取消');
