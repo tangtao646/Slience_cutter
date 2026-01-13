@@ -60,8 +60,8 @@ jobs:
             mv src-tauri/binaries/ffprobe.exe src-tauri/binaries/ffprobe-${{ matrix.triple }}.exe
           elif [ "${{ matrix.triple }}" == "aarch64-apple-darwin" ]; then
             # Download Mac ARM FFmpeg
-            curl -L https://www.osxexperts.net/ffmpeg80arm.zip -o ffmpeg.zip
-            curl -L https://www.osxexperts.net/ffprobe80arm.zip -o ffprobe.zip
+            curl -L --http1.1 https://www.osxexperts.net/ffmpeg80arm.zip -o ffmpeg.zip
+            curl -L --http1.1 https://www.osxexperts.net/ffprobe80arm.zip -o ffprobe.zip
             unzip ffmpeg.zip -d src-tauri/binaries
             unzip ffprobe.zip -d src-tauri/binaries
             mv src-tauri/binaries/ffmpeg src-tauri/binaries/ffmpeg-${{ matrix.triple }}
@@ -70,8 +70,8 @@ jobs:
             chmod +x src-tauri/binaries/ffprobe-${{ matrix.triple }}
           else
             # Download Mac x86_64 FFmpeg
-            curl -L https://www.osxexperts.net/ffmpeg80intel.zip -o ffmpeg.zip
-            curl -L https://www.osxexperts.net/ffprobe80intel.zip -o ffprobe.zip
+            curl -L --http1.1 https://www.osxexperts.net/ffmpeg80intel.zip -o ffmpeg.zip
+            curl -L --http1.1 https://www.osxexperts.net/ffprobe80intel.zip -o ffprobe.zip
             unzip ffmpeg.zip -d src-tauri/binaries
             unzip ffprobe.zip -d src-tauri/binaries
             mv src-tauri/binaries/ffmpeg src-tauri/binaries/ffmpeg-${{ matrix.triple }}
