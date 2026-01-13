@@ -20,10 +20,12 @@ export function useTimelineModel({
     viewMode
 }) {
     // 1. 衍生状态：合并后的静音区 (用于计算和虚拟时间映射)
-    const mergedSilences = useMemo(() => 
-        mergeSegments(confirmedSegments), 
-        [confirmedSegments]
-    );
+    // 关键变更：为了支持“递进式切片”，碎片视图的基准只由“已确认”的静音区决定。
+    // “待处理”的静音区将作为红框显示在片段上，而不是直接切除。
+    const mergedSilences = useMemo(() => {
+        // 映射逻辑只考虑已确认的剔除
+        return mergeSegments(confirmedSegments);
+    }, [confirmedSegments]);
 
     // 2. 衍生状态：统计信息 (唯一源计算)
     const stats = useMemo(() => 
@@ -31,13 +33,14 @@ export function useTimelineModel({
         [totalDuration, confirmedSegments, pendingSegments]
     );
 
-    // 3. 衍生状态：碎片化视图的语音片段
+    // 3. 衍生状态：碎片化视图的语音片段 (只根据已确认的静音区生成)
     const speechClips = useMemo(() => 
         generateSpeechClips(totalDuration, mergedSilences),
         [totalDuration, mergedSilences]
     );
 
-    const virtualDuration = useMemo(() => stats.remaining, [stats.remaining]);
+    // 虚拟时长现在是“已确认剔除后”的剩余时长（也是时间轴的总长度）
+    const virtualDuration = useMemo(() => stats.currentBase, [stats.currentBase]);
 
     // --- 渐进式重构：统一 Action 中心 ---
     // 所有的修改都通过这个函数，并在此处存入历史记录
@@ -50,9 +53,17 @@ export function useTimelineModel({
         }
     }, [setConfirmedSegments, setPendingSegments]);
 
-    // 4. 时间转换辅助函数 (闭包引用当前 mergedSilences)
-    const realToVirtual = useCallback((t) => r2v(t, mergedSilences), [mergedSilences]);
-    const virtualToReal = useCallback((t) => v2r(t, mergedSilences), [mergedSilences]);
+    // 4. 时间转换辅助函数
+    // 修复：在连续模式下，时间轴应保持线性，不进行压缩映射
+    const realToVirtual = useCallback((t) => {
+        if (viewMode === 'continuous') return t;
+        return r2v(t, mergedSilences);
+    }, [mergedSilences, viewMode]);
+
+    const virtualToReal = useCallback((t) => {
+        if (viewMode === 'continuous') return t;
+        return v2r(t, mergedSilences);
+    }, [mergedSilences, viewMode]);
 
     // 5. 业务操作方法 - 保持 API 不变，内部改为调用 pushState
     

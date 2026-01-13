@@ -34,7 +34,7 @@ const MainInterface = ({ appData, isTauri }) => {
     const [intensity, setIntensity] = useState(0.25); // 数值化：0.0 (None) 到 1.0 (Super)
     const [committedIntensity, setCommittedIntensity] = useState(0); // 已固化的强度基准
     const [history, setHistory] = useState([]); // 撤销历史：存储 { confirmedSegments, committedIntensity }
-    const [threshold, setThreshold] = useState(0.015);
+    const [threshold, setThreshold] = useState(-36.0); // 单位：dB，默认 -36dB (行业标准推荐值)
     const [isAutoThreshold, setIsAutoThreshold] = useState(true); // 新增：是否处于自动阈值模式
     const [padding, setPadding] = useState(0.25); // Speech Padding (Humanization)
     const [exportEnabled, setExportEnabled] = useState(false);
@@ -184,11 +184,11 @@ const MainInterface = ({ appData, isTauri }) => {
         // 核心改动：自动同步 Padding 状态，不再提供 UI 调节
         setPadding(targetPadding);
 
-        console.log(`[MainInterface] Starting analysis: Intensity=${targetIntensity.toFixed(2)}, minDur=${minSilenceDuration.toFixed(2)}s, threshold=${threshold.toFixed(3)} (Auto=${isAutoThreshold})`);
+        console.log(`[MainInterface] Starting analysis: Intensity=${targetIntensity.toFixed(2)}, minDur=${minSilenceDuration.toFixed(2)}s, threshold=${threshold}dB (Auto=${isAutoThreshold})`);
         setWaveInfo('正在分析静音...');
         
         try {
-            const thresholdDb = 20 * Math.log10(threshold || 0.001);
+            const thresholdDb = threshold; // 已经是 dB 单位
             const audioData = appData.state.audioData;
             
             const rawSilences = await appData.tauri.detect_silences_with_params({
@@ -273,11 +273,19 @@ const MainInterface = ({ appData, isTauri }) => {
         setCurrentFile({ ...info });
         appData.state.currentFile = info;
         
-        // 切新文件时，必须清空旧的剪辑段，避免时长冲突导致崩溃
+        // 每次导入新素材，强制重置所有页面状态到初始值
         setConfirmedSegments([]);
         setPendingSegments([]);
         setHistory([]);
+        setIntensity(0.25);
+        setCommittedIntensity(0);
+        setThreshold(-36.0);
+        setIsAutoThreshold(true);
+        setPadding(0.25);
+        setViewMode('continuous');
         setExportEnabled(false);
+        setExportProgress(0);
+        setVideoDuration(0);
 
         const isAudioOnly = /\.(mp3|wav|m4a|flac|aac|ogg)$/i.test(info.name);
 
@@ -358,7 +366,7 @@ const MainInterface = ({ appData, isTauri }) => {
                 }));
             }
             
-            setThreshold(0.015);
+            setThreshold(-36.0);
             setIsAutoThreshold(true);
             
             setAudioDataReady(prev => prev + 1);
@@ -410,7 +418,7 @@ const MainInterface = ({ appData, isTauri }) => {
             // 如果发送未排序的 confirmedSegments，后端处理逻辑会出错
             const request = {
                 inputPath: inputPath,
-                thresholdDb: 20 * Math.log10(threshold || 0.01),
+                thresholdDb: threshold, // 已经是 dB 单位
                 minSilenceDuration: 0.8, 
                 segments: mergedSilences.map(s => ({
                     startTime: s.start,
@@ -560,7 +568,7 @@ const MainInterface = ({ appData, isTauri }) => {
             // 重置策略与 UI 状态
             setIntensity(0.25); // 恢复初始 Natural 档位
             setCommittedIntensity(0);
-            setThreshold(0.015);
+            setThreshold(-36.0);
             setIsAutoThreshold(true);
             setPadding(0.25);
             setExportEnabled(false);

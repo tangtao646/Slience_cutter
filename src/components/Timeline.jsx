@@ -928,7 +928,12 @@ const Timeline = ({
                 } else if (selectedTrack === 'media') {
                     // 如果在碎片模式下选中了具体片段，则执行批量删除片段
                     if (viewMode === 'fragmented' && selectedIndices.length > 0) {
-                        bulkDelete(selectedIndices, 'media');
+                        // 如果选中了所有剩余片段，则视为删除整个媒体轨道
+                        if (selectedIndices.length === speechClips.length) {
+                            onDeleteMedia && onDeleteMedia();
+                        } else {
+                            bulkDelete(selectedIndices, 'media');
+                        }
                     } else {
                         // 否则（连续模式，或碎片模式下选中整个轨道），执行删除整个媒体
                         onDeleteMedia && onDeleteMedia();
@@ -945,7 +950,7 @@ const Timeline = ({
         };
         window.addEventListener('keydown', handleKeys);
         return () => window.removeEventListener('keydown', handleKeys);
-    }, [selectedIndices, selectedTrack, viewMode, bulkDelete, onDeleteMedia]);
+    }, [selectedIndices, selectedTrack, viewMode, bulkDelete, onDeleteMedia, speechClips]);
 
     // Zoom Handlers
     useEffect(() => {

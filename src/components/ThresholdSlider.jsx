@@ -3,8 +3,8 @@ import { useTranslation } from '../modules/i18n.jsx';
 
 const ThresholdSlider = ({ threshold, setThreshold, isAuto, setIsAuto }) => {
     const { t } = useTranslation();
-    const min = 0.0001;
-    const max = 0.1;
+    const min = -60;
+    const max = -10;
     
     const handleChange = (e) => {
         const val = parseFloat(e.target.value);
@@ -36,15 +36,15 @@ const ThresholdSlider = ({ threshold, setThreshold, isAuto, setIsAuto }) => {
                                 const checked = e.target.checked;
                                 setIsAuto(checked);
                                 if (checked) {
-                                    setThreshold(0.015); // Auto 模式下重置到默认阈值
+                                    setThreshold(-36.0); // 行业标准：-36dB (常用于人声/背景音分离)
                                 }
                             }}
                             style={{ width: '12px', height: '12px' }}
                         />
                         {t('sidebar.threshold_auto')}
                     </label>
-                    <div className="threshold-value" style={{ fontSize: '11px', color: isAuto ? '#777' : '#eee' }}>
-                        {threshold.toFixed(4)}
+                    <div className="threshold-value" style={{ fontSize: '11px', color: isAuto ? '#777' : '#eee', width: '45px', textAlign: 'right' }}>
+                        {threshold > -100 ? `${threshold.toFixed(1)} dB` : '-∞'}
                     </div>
                 </div>
             </div>
@@ -53,10 +53,14 @@ const ThresholdSlider = ({ threshold, setThreshold, isAuto, setIsAuto }) => {
                     type="range" 
                     min={min} 
                     max={max} 
-                    step="0.0001" 
+                    step="0.5" 
                     value={threshold} 
                     onChange={handleChange}
-                    style={{ opacity: isAuto ? 0.5 : 1 }}
+                    disabled={isAuto}
+                    style={{ 
+                        opacity: isAuto ? 0.3 : 1,
+                        cursor: isAuto ? 'not-allowed' : 'pointer'
+                    }}
                 />
             </div>
         </div>

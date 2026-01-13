@@ -142,7 +142,7 @@ const TransportBar = ({ appData, currentFile, segments, pendingSegments, viewMod
 
     // Derived values for fragmented mode
     const displayCurrent = getVirtualTime(currentTime);
-    const displayTotal = viewMode === 'fragmented' ? (stats?.remaining || 0) : (duration || 0);
+    const displayTotal = viewMode === 'fragmented' ? (stats?.currentBase || 0) : (duration || 0);
 
     return (
         <div className="transport-bar">

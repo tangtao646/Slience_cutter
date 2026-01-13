@@ -92,9 +92,10 @@ export function virtualToRealTime(vTime, silenceSegments) {
     let lastREnd = 0;
 
     for (const seg of silenceSegments) {
-        const speechDuration = seg.start - lastREnd;
-        if (vTime <= currentVTime + speechDuration) {
-            return lastREnd + (vTime - currentVTime);
+        const speechDuration = Math.max(0, seg.start - lastREnd);
+        // 使用极小的 alpha 容差 (0.0001s) 处理浮点数边界问题，防止跳过最后一个语音片段
+        if (vTime <= currentVTime + speechDuration + 0.0001) {
+            return lastREnd + Math.max(0, vTime - currentVTime);
         }
         currentVTime += speechDuration;
         lastREnd = seg.end;
