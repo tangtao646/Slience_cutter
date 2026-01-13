@@ -5,7 +5,6 @@ const IntensitySlider = ({ intensity, setIntensity, committedIntensity, onAnalyz
     const { t } = useTranslation();
     // 强度区间标记
     const marks = [
-        { value: 0, label: t('sidebar.intensity_none') },
         { value: 0.25, label: t('sidebar.intensity_natural') },
         { value: 0.5, label: t('sidebar.intensity_compact') },
         { value: 1.0, label: t('sidebar.intensity_super') }
@@ -27,7 +26,7 @@ const IntensitySlider = ({ intensity, setIntensity, committedIntensity, onAnalyz
             <div className="control-label" style={{ marginBottom: '8px' }}>
                 <span>{t('sidebar.intensity_label')}</span>
                 <span style={{ fontSize: '10px', color: '#666' }}>
-                    {intensity === 0 ? 'Off' : `${(intensity * 100).toFixed(0)}%`}
+                    {`${(intensity * 100).toFixed(0)}%`}
                 </span>
             </div>
 
