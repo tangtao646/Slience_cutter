@@ -1,11 +1,13 @@
 import React from 'react';
 import { formatDuration } from '../modules/utils';
+import { useTranslation } from '../modules/i18n.jsx';
 
 const SegmentsList = ({ segments = [], pendingSegments = [] }) => {
+    const { t } = useTranslation();
     return (
         <div className="segments-list show">
             {segments.length === 0 && pendingSegments.length === 0 ? (
-                <div className="segment-item" style={{ color: '#555', border: 'none' }}>No segments detected</div>
+                <div className="segment-item" style={{ color: '#555', border: 'none' }}>{t('sidebar.segments_empty')}</div>
             ) : (
                 <>
                     {/* 优先显示已确定的 */}
@@ -15,7 +17,7 @@ const SegmentsList = ({ segments = [], pendingSegments = [] }) => {
                                 {formatDuration(segment.start)} - {formatDuration(segment.end)}
                             </span>
                             <span className="segment-duration" style={{ color: '#666' }}>
-                                {(segment.duration || (segment.end - segment.start)).toFixed(1)}s (Applied)
+                                {(segment.duration || (segment.end - segment.start)).toFixed(1)}s ({t('sidebar.segments_applied')})
                             </span>
                         </div>
                     ))}

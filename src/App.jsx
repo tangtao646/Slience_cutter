@@ -8,6 +8,7 @@ import { getVideoPlayerManager } from './modules/video-player.js';
 // Components (We will create these next)
 import LoadingScreen from './components/LoadingScreen';
 import MainInterface from './components/MainInterface';
+import { I18nProvider } from './modules/i18n.jsx';
 
 const App = () => {
     const [view, setView] = useState('loading');
@@ -53,10 +54,12 @@ const App = () => {
     }
 
     return (
-        <MainInterface 
-            appData={appData.current}
-            isTauri={isTauri}
-        />
+        <I18nProvider>
+            <MainInterface 
+                appData={appData.current}
+                isTauri={isTauri}
+            />
+        </I18nProvider>
     );
 };
 

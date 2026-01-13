@@ -1,6 +1,7 @@
 import React from 'react';
 import IntensitySlider from './IntensitySlider';
 import ThresholdSlider from './ThresholdSlider';
+import { useTranslation } from '../modules/i18n.jsx';
 
 const RightPanel = ({ 
     appData, 
@@ -24,6 +25,7 @@ const RightPanel = ({
     setViewMode,
     stats
 }) => {
+    const { t } = useTranslation();
     const hasPending = pendingSegments.length > 0;
     const totalCuts = (segments?.length || 0) + (pendingSegments?.length || 0);
 
@@ -32,7 +34,7 @@ const RightPanel = ({
             <div className="panel-tabs">
                 <div className="panel-tab active">
                     <i className="fa fa-scissors"></i>
-                    <span>Silence</span>
+                    <span>{t('sidebar.control')}</span>
                 </div>
                 
                 <div 
@@ -51,7 +53,7 @@ const RightPanel = ({
             
             <div className="panel-content">
                 <div className="control-group">
-                    <div className="control-label" style={{ marginBottom: '12px' }}>Silence Detection</div>
+                    <div className="control-label" style={{ marginBottom: '12px' }}>{t('sidebar.strategy')}</div>
                     <button 
                         className="action-btn"
                         onClick={onRemoveSilence}
@@ -75,7 +77,7 @@ const RightPanel = ({
                         }}
                         title={hasPending ? "Confirm and remove marked areas" : "Adjust intensity to find silence first"}
                     >
-                        <span>Remove Silence</span>
+                        <span>{t('btn.remove')}</span>
                         {hasPending && <span style={{ opacity: 0.9 }}>({pendingSegments.length})</span>}
                     </button>
                 </div>

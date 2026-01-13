@@ -8,8 +8,10 @@ import ExportProgressModal from './ExportProgressModal';
 import { formatDuration, formatFileSize } from '../modules/utils';
 import { useTimelineModel } from '../hooks/useTimelineModel';
 import { mergeSegments, subtractSegments } from '../modules/timeline-logic';
+import { useTranslation } from '../modules/i18n.jsx';
 
 const MainInterface = ({ appData, isTauri }) => {
+    const { t, language, setLanguage } = useTranslation();
     console.log('[MainInterface] Render', { hasFile: !!appData?.state?.currentFile });
     const [currentFile, setCurrentFile] = useState(null);
     const [fileInfo, setFileInfo] = useState({
@@ -28,7 +30,7 @@ const MainInterface = ({ appData, isTauri }) => {
     const [confirmedSegments, setConfirmedSegments] = useState([]); // 基准：已确认剪掉的部分
     const [pendingSegments, setPendingSegments] = useState([]); // 动态：当前按钮探测出的拟剪掉部分
     const [viewMode, setViewMode] = useState('continuous'); // 'continuous' (overlays) or 'fragmented' (cut)
-    const [waveInfo, setWaveInfo] = useState('Wait for a file...');
+    const [waveInfo, setWaveInfo] = useState(t('status.waiting'));
     const [intensity, setIntensity] = useState(0.25); // 数值化：0.0 (None) 到 1.0 (Super)
     const [committedIntensity, setCommittedIntensity] = useState(0); // 已固化的强度基准
     const [history, setHistory] = useState([]); // 撤销历史：存储 { confirmedSegments, committedIntensity }
@@ -395,8 +397,8 @@ const MainInterface = ({ appData, isTauri }) => {
 
         setIsExporting(true);
         setExportProgress(0);
-        setExportMessage('正在初始化并行导出...');
-        setWaveInfo('正在导出视频...');
+        setExportMessage(t('export.initializing'));
+        setWaveInfo(t('export.title'));
         
         try {
             // Determine the actual path the backend should use
@@ -421,11 +423,11 @@ const MainInterface = ({ appData, isTauri }) => {
             const result = await appData.tauri.processVideo(request);
             console.log('Export result:', result);
             if (result && result.success) {
-                setWaveInfo('导出完成');
+                setWaveInfo(t('export.completed'));
                 setIsExporting(false);
                 
-                await message(`文件已保存至：\n${result.outputPath}`, { 
-                    title: '导出成功'
+                await message(t('export.exported_to', { path: result.outputPath }), { 
+                    title: t('dialog.success')
                 });
                 
                 // 成功关闭对话框后，自动打开所在文件夹并选中文件 (reveal)
@@ -434,22 +436,22 @@ const MainInterface = ({ appData, isTauri }) => {
                 }
             } else if (result && result.cancelled) {
                 console.log('Export detected as cancelled');
-                setWaveInfo('导出已取消');
+                setWaveInfo(t('export.cancelled'));
                 setIsExporting(false);
             } else {
-                throw new Error(result?.message || '导出失败');
+                throw new Error(result?.message || t('export.error', { error: '' }));
             }
         } catch (error) {
             console.error('Export failed:', error);
             const errorStr = error.toString();
             if (errorStr.includes('EXPORT_CANCELLED') || error === 'EXPORT_CANCELLED') {
-                setWaveInfo('导出已取消');
+                setWaveInfo(t('export.cancelled'));
                 setIsExporting(false);
                 return;
             }
-            setWaveInfo('导出失败');
+            setWaveInfo(t('export.error', { error: '' }));
             setIsExporting(false);
-            await message(`导出失败: ${error.message}`, { title: '错误', kind: 'error' });
+            await message(t('export.error', { error: error.message }), { title: t('dialog.error'), kind: 'error' });
         }
     };
 
@@ -457,7 +459,7 @@ const MainInterface = ({ appData, isTauri }) => {
         console.log('Handling cancel export click...');
         // 瞬间关闭 UI，无需等待后端异步清理完成
         setIsExporting(false);
-        setWaveInfo('正在取消...');
+        setWaveInfo(t('status.cancelling'));
         await appData.tauri.cancelExport();
     };
 
@@ -475,7 +477,7 @@ const MainInterface = ({ appData, isTauri }) => {
                 console.log('[MainInterface] Content empty, resetting intensity.');
                 setIntensity(0.25);
                 setCommittedIntensity(0);
-                setWaveInfo('内容已清空，播放已停止，档位已重置。');
+                setWaveInfo(t('status.content_empty'));
             }
         }
     }, [currentFile, viewMode, stats.remaining, committedIntensity, appData.videoPlayer]);
@@ -553,7 +555,7 @@ const MainInterface = ({ appData, isTauri }) => {
             setPendingSegments([]);
             setHistory([]); 
             setVideoDuration(0);
-            setWaveInfo('No file loaded');
+            setWaveInfo(t('status.waiting'));
             
             // 重置策略与 UI 状态
             setIntensity(0.25); // 恢复初始 Natural 档位
@@ -578,7 +580,7 @@ const MainInterface = ({ appData, isTauri }) => {
             setFileInfo(prev => ({ ...prev, hasAudio: false }));
             appData.state.hasAudio = false;
             setConfirmedSegments([]);
-            setWaveInfo('Audio track removed');
+            setWaveInfo(t('status.no_file'));
         }
     };
 

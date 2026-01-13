@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from '../modules/i18n.jsx';
 
 const TransportBar = ({ appData, currentFile, segments, pendingSegments, viewMode, stats }) => {
+    const { t } = useTranslation();
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const requestRef = useRef();
@@ -162,7 +164,7 @@ const TransportBar = ({ appData, currentFile, segments, pendingSegments, viewMod
                         gap: '4px'
                     }}
                 >
-                    <i className="fa fa-rotate-left"></i> -5s
+                    <i className="fa fa-rotate-left"></i> {t('transport.step_backward')}
                 </button>
 
                 <button 
@@ -190,7 +192,7 @@ const TransportBar = ({ appData, currentFile, segments, pendingSegments, viewMod
                         gap: '4px'
                     }}
                 >
-                    <i className="fa fa-rotate-right"></i> +5s
+                    <i className="fa fa-rotate-right"></i> {t('transport.step_forward')}
                 </button>
 
                 <div className="time-counter" style={{ 

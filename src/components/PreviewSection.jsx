@@ -1,7 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
+import { useTranslation } from '../modules/i18n.jsx';
 
 const PreviewSection = ({ appData, currentFile, onFileSelect, setFileInfo, setVideoDuration }) => {
+    const { t } = useTranslation();
     // console.log('[PreviewSection] Render', { hasFile: !!currentFile });
     const videoRef = useRef(null);
     const fileInputRef = useRef(null);
@@ -31,7 +33,7 @@ const PreviewSection = ({ appData, currentFile, onFileSelect, setFileInfo, setVi
 
         const handleError = (e) => {
             console.error('[Video Error Event]', videoElement.error, e);
-            setError(`Load Error: ${videoElement.error?.message || videoElement.error?.code || 'Unknown'}`);
+            setError(`${t('preview.load_error')}: ${videoElement.error?.message || videoElement.error?.code || 'Unknown'}`);
         };
 
         const handlePlayCheck = () => setDebugInfo(prev => ({ ...prev, isPlaying: !videoElement.paused }));
@@ -164,9 +166,9 @@ const PreviewSection = ({ appData, currentFile, onFileSelect, setFileInfo, setVi
             {!currentFile && (
                 <div className="preview-drop" role="button" onClick={handleBrowse}>
                     <div className="preview-drop-inner">
-                        <div className="preview-drop-title">Import a File to Edit</div>
-                        <div className="preview-drop-sub">audio or video — click to browse</div>
-                        <button className="browse-button" type="button" onClick={(e) => { e.stopPropagation(); handleBrowse(); }}>Browse</button>
+                        <div className="preview-drop-title">{t('preview.drop_title')}</div>
+                        <div className="preview-drop-sub">{t('preview.drop_sub')}</div>
+                        <button className="browse-button" type="button" onClick={(e) => { e.stopPropagation(); handleBrowse(); }}>{t('preview.browse')}</button>
                     </div>
                 </div>
             )}
@@ -178,7 +180,7 @@ const PreviewSection = ({ appData, currentFile, onFileSelect, setFileInfo, setVi
                             <i className="fa fa-exclamation-triangle" style={{ fontSize: '32px', marginBottom: '10px' }}></i>
                             <div>{error}</div>
                             <div style={{ fontSize: '10px', marginTop: '10px', maxWidth: '300px', wordBreak: 'break-all' }}>{debugInfo?.src}</div>
-                            <button onClick={() => videoRef.current && videoRef.current.load()} style={{ marginTop: '10px', cursor: 'pointer' }}>Retry</button>
+                            <button onClick={() => videoRef.current && videoRef.current.load()} style={{ marginTop: '10px', cursor: 'pointer' }}>{t('preview.retry')}</button>
                         </div>
                     )}
                     

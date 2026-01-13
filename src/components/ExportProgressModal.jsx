@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../modules/i18n.jsx';
 
 const ExportProgressModal = ({ progress, message, onCancel }) => {
+    const { t } = useTranslation();
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
     useEffect(() => {
@@ -14,13 +16,12 @@ const ExportProgressModal = ({ progress, message, onCancel }) => {
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
-        if (h > 0) {
-            return `${h} 时 ${m} 分 ${s} 秒`;
-        }
-        if (m > 0) {
-            return `${m} 分 ${s} 秒`;
-        }
-        return `${s} 秒`;
+        
+        let result = '';
+        if (h > 0) result += `${h} ${t('units.hour')} `;
+        if (m > 0 || h > 0) result += `${m} ${t('units.minute')} `;
+        result += `${s} ${t('units.second')}`;
+        return result.trim();
     };
 
     return (
@@ -48,9 +49,9 @@ const ExportProgressModal = ({ progress, message, onCancel }) => {
                 color: '#fff'
             }}>
                 <div style={{ marginBottom: '24px' }}>
-                    <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', letterSpacing: '-0.5px' }}>正在导出视频</h3>
+                    <h3 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold', letterSpacing: '-0.5px' }}>{t('export.title')}</h3>
                     <p style={{ color: '#888', fontSize: '13px', marginTop: '8px', minHeight: '1.4em' }}>
-                        {message || '准备中...'}
+                        {message || t('export.preparing')}
                     </p>
                 </div>
 
@@ -78,7 +79,7 @@ const ExportProgressModal = ({ progress, message, onCancel }) => {
                 }}>
                     <span style={{ color: '#345cf0', fontWeight: '600' }}>{Math.round(progress)}%</span>
                     <span style={{ color: '#aaa' }}>
-                        已耗时: <span style={{ color: '#eee' }}>{formatTime(elapsedSeconds)}</span>
+                        {t('export.elapsed')}: <span style={{ color: '#eee' }}>{formatTime(elapsedSeconds)}</span>
                     </span>
                 </div>
                 
@@ -102,7 +103,7 @@ const ExportProgressModal = ({ progress, message, onCancel }) => {
                             transition: 'background 0.2s'
                         }}
                     >
-                        取消导出
+                        {t('export.cancel')}
                     </button>
 
                     <p style={{ 
@@ -111,8 +112,7 @@ const ExportProgressModal = ({ progress, message, onCancel }) => {
                         lineHeight: '1.5',
                         margin: 0
                     }}>
-                        导出过程中请勿关闭窗口。长视频并行处理时 CPU 占用较高，<br/>
-                        取消后将停止处理并移除临时文件。
+                        {t('export.warning_detail')}
                     </p>
                 </div>
             </div>

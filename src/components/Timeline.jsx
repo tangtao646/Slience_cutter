@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useTranslation } from '../modules/i18n.jsx';
 
 // Configuration
 const DEFAULT_ZOOM = 50; // pixels per second
@@ -52,6 +53,7 @@ const Timeline = ({
     viewMode = 'continuous',
     onDeleteMedia // 新增：用于删除整个轨道文件
 }) => {
+    const { t } = useTranslation();
     const { 
         stats, 
         speechClips, 
@@ -1136,7 +1138,7 @@ const Timeline = ({
                         <svg width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
                             <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
                         </svg>
-                        添加静音遮罩
+                        {t('timeline.add_mask')}
                     </div>
                 </div>
             )}

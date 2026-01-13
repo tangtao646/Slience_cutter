@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../modules/i18n.jsx';
 
 const IntensitySlider = ({ intensity, setIntensity, committedIntensity, onAnalyze }) => {
+    const { t } = useTranslation();
     // 强度区间标记
     const marks = [
-        { value: 0, label: 'None' },
-        { value: 0.25, label: 'Natural' },
-        { value: 0.5, label: 'Fast' },
-        { value: 1.0, label: 'Super' }
+        { value: 0, label: t('sidebar.intensity_none') },
+        { value: 0.25, label: t('sidebar.intensity_natural') },
+        { value: 0.5, label: t('sidebar.intensity_compact') },
+        { value: 1.0, label: t('sidebar.intensity_super') }
     ];
 
     const handlePresetClick = (val) => {
@@ -23,7 +25,7 @@ const IntensitySlider = ({ intensity, setIntensity, committedIntensity, onAnalyz
     return (
         <div className="control-group">
             <div className="control-label" style={{ marginBottom: '8px' }}>
-                <span>Cutting Strategy</span>
+                <span>{t('sidebar.intensity_label')}</span>
                 <span style={{ fontSize: '10px', color: '#666' }}>
                     {intensity === 0 ? 'Off' : `${(intensity * 100).toFixed(0)}%`}
                 </span>

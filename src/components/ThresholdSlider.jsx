@@ -1,6 +1,8 @@
 import React from 'react';
+import { useTranslation } from '../modules/i18n.jsx';
 
 const ThresholdSlider = ({ threshold, setThreshold, isAuto, setIsAuto }) => {
+    const { t } = useTranslation();
     const min = 0.0001;
     const max = 0.1;
     
@@ -16,7 +18,7 @@ const ThresholdSlider = ({ threshold, setThreshold, isAuto, setIsAuto }) => {
     return (
         <div className="control-group">
             <div className="control-label">
-                <span>Threshold (Noise Filter)</span>
+                <span>{t('sidebar.threshold_label')}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <label style={{ 
                         fontSize: '10px', 
@@ -39,7 +41,7 @@ const ThresholdSlider = ({ threshold, setThreshold, isAuto, setIsAuto }) => {
                             }}
                             style={{ width: '12px', height: '12px' }}
                         />
-                        AUTO
+                        {t('sidebar.threshold_auto')}
                     </label>
                     <div className="threshold-value" style={{ fontSize: '11px', color: isAuto ? '#777' : '#eee' }}>
                         {threshold.toFixed(4)}
