@@ -13,6 +13,43 @@
     "fs:allow-temp-write-recursive",
     "fs:allow-home-read-recursive",
     "fs:allow-download-read-recursive",
-    "dialog:default"
+    "dialog:default",
+    {
+      "identifier": "shell:allow-execute",
+      "permissions": [
+        "core:default",
+        "shell:default",
+        "fs:default",
+        "dialog:default",
+        {
+          "identifier": "allow-ffmpeg-sidecar",
+          "allow": [
+            {
+              "sidecar": true,
+              "args": [
+                {
+                  "validator": "(.*)"
+                }
+              ]
+            }
+          ],
+          "local": "binaries/ffmpeg"
+        },
+        {
+          "identifier": "allow-ffprobe-sidecar",
+          "allow": [
+            {
+              "sidecar": true,
+              "args": [
+                {
+                  "validator": "(.*)"
+                }
+              ]
+            }
+          ],
+          "local": "binaries/ffprobe"
+        }
+      ]
+    }
   ]
 }
