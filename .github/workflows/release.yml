@@ -52,30 +52,33 @@ jobs:
         run: |
           mkdir -p src-tauri/binaries
           if [ "${{ matrix.platform }}" == "windows-latest" ]; then
-            # 使用 gyan.dev 的永久最新版链接，无需担心版本号变化
             curl -L https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -o ffmpeg.zip
             unzip -j ffmpeg.zip "**/ffmpeg.exe" -d src-tauri/binaries
             unzip -j ffmpeg.zip "**/ffprobe.exe" -d src-tauri/binaries
-            mv src-tauri/binaries/ffmpeg.exe src-tauri/binaries/ffmpeg-${{ matrix.triple }}.exe
-            mv src-tauri/binaries/ffprobe.exe src-tauri/binaries/ffprobe-${{ matrix.triple }}.exe
-          elif [ "${{ matrix.triple }}" == "aarch64-apple-darwin" ]; then
-            # Download Mac ARM FFmpeg
-            curl -L --http1.1 https://www.osxexperts.net/ffmpeg80arm.zip -o ffmpeg.zip
-            curl -L --http1.1 https://www.osxexperts.net/ffprobe80arm.zip -o ffprobe.zip
-            unzip ffmpeg.zip -d src-tauri/binaries
-            unzip ffprobe.zip -d src-tauri/binaries
-            mv src-tauri/binaries/ffmpeg src-tauri/binaries/ffmpeg-${{ matrix.triple }}
-            mv src-tauri/binaries/ffprobe src-tauri/binaries/ffprobe-${{ matrix.triple }}
-            chmod +x src-tauri/binaries/ffmpeg-${{ matrix.triple }}
-            chmod +x src-tauri/binaries/ffprobe-${{ matrix.triple }}
+            # 重命名必须严格匹配：名字-目标三元组.exe
+            mv src-tauri/binaries/ffmpeg.exe src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe
+            mv src-tauri/binaries/ffprobe.exe src-tauri/binaries/ffprobe-x86_64-pc-windows-msvc.exe
           else
-            # Download Mac x86_64 FFmpeg
-            curl -L --http1.1 https://www.osxexperts.net/ffmpeg80intel.zip -o ffmpeg.zip
-            curl -L --http1.1 https://www.osxexperts.net/ffprobe80intel.zip -o ffprobe.zip
-            unzip ffmpeg.zip -d src-tauri/binaries
-            unzip ffprobe.zip -d src-tauri/binaries
+            # Mac 处理
+            URL_FFMPEG="https://www.osxexperts.net/ffmpeg80intel.zip"
+            URL_FFPROBE="https://www.osxexperts.net/ffprobe80intel.zip"
+            if [ "${{ matrix.triple }}" == "aarch64-apple-darwin" ]; then
+              URL_FFMPEG="https://www.osxexperts.net/ffmpeg80arm.zip"
+              URL_FFPROBE="https://www.osxexperts.net/ffprobe80arm.zip"
+            fi
+            
+            curl -L --http1.1 $URL_FFMPEG -o ffmpeg.zip
+            curl -L --http1.1 $URL_FFPROBE -o ffprobe.zip
+            unzip -o ffmpeg.zip -d src-tauri/binaries
+            unzip -o ffprobe.zip -d src-tauri/binaries
+            
+            # 重命名：名字-目标三元组
             mv src-tauri/binaries/ffmpeg src-tauri/binaries/ffmpeg-${{ matrix.triple }}
             mv src-tauri/binaries/ffprobe src-tauri/binaries/ffprobe-${{ matrix.triple }}
+            
+            # 关键步骤：解除 macOS 的损坏拦截
+            xattr -cr src-tauri/binaries/ffmpeg-${{ matrix.triple }}
+            xattr -cr src-tauri/binaries/ffprobe-${{ matrix.triple }}
             chmod +x src-tauri/binaries/ffmpeg-${{ matrix.triple }}
             chmod +x src-tauri/binaries/ffprobe-${{ matrix.triple }}
           fi
