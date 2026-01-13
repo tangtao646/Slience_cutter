@@ -10,6 +10,7 @@ jobs:
   build-tauri:
     permissions:
       contents: write
+      releases: write
     strategy:
       fail-fast: false
       matrix:

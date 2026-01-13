@@ -1,6 +1,6 @@
 {
   "productName": "silence-cutter",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "identifier": "com.silencecutter.app",
   "build": {
     "beforeDevCommand": "npm run dev",
