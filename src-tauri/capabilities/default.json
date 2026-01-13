@@ -17,37 +17,28 @@
     {
       "identifier": "shell:allow-execute",
       "permissions": [
-        "core:default",
-        "shell:default",
-        "fs:default",
-        "dialog:default",
         {
-          "identifier": "allow-ffmpeg-sidecar",
+          "identifier": "shell:allow-execute",
           "allow": [
             {
               "sidecar": true,
+              "name": "binaries/ffmpeg",
+              "args": [
+                {
+                  "validator": "(.*)"
+                }
+              ]
+            },
+            {
+              "sidecar": true,
+              "name": "binaries/ffprobe",
               "args": [
                 {
                   "validator": "(.*)"
                 }
               ]
             }
-          ],
-          "local": "binaries/ffmpeg"
-        },
-        {
-          "identifier": "allow-ffprobe-sidecar",
-          "allow": [
-            {
-              "sidecar": true,
-              "args": [
-                {
-                  "validator": "(.*)"
-                }
-              ]
-            }
-          ],
-          "local": "binaries/ffprobe"
+          ]
         }
       ]
     }
