@@ -40,4 +40,4 @@ This Privacy Policy may be updated from time to time for any reason. You are adv
 ## 6. Contact Us
 
 If you have any questions regarding privacy while using the Application, or have questions about our practices, please contact us via GitHub Issues at:
-https://github.com/Start2025/silence-cutter/issues
+https://github.com/tangtao646/Slience_cutter/issues
