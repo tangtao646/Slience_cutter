@@ -189,6 +189,7 @@ const PreviewSection = ({ appData, currentFile, onFileSelect, setFileInfo, setVi
                         key={currentFile.path || 'video-player'} // Force DOM reset on new file
                         ref={videoRef} 
                         playsInline
+                        crossOrigin="anonymous"
                         controls={false}
                         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                     />

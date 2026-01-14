@@ -46,11 +46,13 @@ pub fn run_app() -> tauri::Result<()> {
             
             // 如果 sidecar 不存在，尝试查找系统全局的
             if ffmpeg_path.is_none() {
+                println!("⚠️ 未找到 ffmpeg sidecar，尝试寻找系统全局 ffmpeg...");
                 if let Ok(p) = which::which("ffmpeg") {
                     ffmpeg_path = Some(p.to_string_lossy().to_string());
                 }
             }
             if ffprobe_path.is_none() {
+                println!("⚠️ 未找到 ffprobe sidecar，尝试寻找系统全局 ffprobe...");
                 if let Ok(p) = which::which("ffprobe") {
                     ffprobe_path = Some(p.to_string_lossy().to_string());
                 }
@@ -59,12 +61,15 @@ pub fn run_app() -> tauri::Result<()> {
             let ffmpeg_available = ffmpeg_path.is_some() && ffprobe_path.is_some();
             
             if ffmpeg_available {
+                println!("🚀 FFmpeg 路径: {:?}", ffmpeg_path);
+                println!("🚀 FFprobe 路径: {:?}", ffprobe_path);
                 if is_sidecar {
                     log::info!("✅ [Sidecar] 模式启动: {:?}", ffmpeg_path);
                 } else {
                     log::info!("ℹ️ [System] 模式启动 (使用全局 FFmpeg): {:?}", ffmpeg_path);
                 }
             } else {
+                println!("❌ 错误: 未找到 FFmpeg/FFprobe！");
                 log::error!("❌ 未找到任何 FFmpeg/FFprobe！应用功能将受限。");
             }
 
@@ -196,12 +201,11 @@ pub fn run_app() -> tauri::Result<()> {
                                 .status(tauri::http::StatusCode::RANGE_NOT_SATISFIABLE)
                                 .header("Content-Range", format!("bytes */{}", file_len))
                                 .header("Access-Control-Allow-Origin", "*")
-                                .header("Access-Control-Allow-Headers", "Range, Accept-Encoding")
                                 .body(Vec::new()).unwrap();
                         }
 
+                        let max_chunk = 5 * 1024 * 1024; // 5MB safe chunk
                         let content_len = end - start + 1;
-                        let max_chunk = 10 * 1024 * 1024; // 10MB chunk limit
                         let actual_len = std::cmp::min(content_len, max_chunk);
                         let actual_end = start + actual_len - 1;
 
@@ -223,11 +227,13 @@ pub fn run_app() -> tauri::Result<()> {
                                     .header("Content-Length", actual_len.to_string())
                                     .header("Content-Type", mime_type)
                                     .header("Access-Control-Allow-Origin", "*")
+                                    .header("Access-Control-Allow-Methods", "GET, OPTIONS")
                                     .header("Access-Control-Allow-Headers", "Range, Accept-Encoding")
+                                    .header("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
                                     .body(buffer).unwrap();
                             },
                             Err(e) => {
-                                log::error!("Read error at {}-{}: {}", start, actual_end, e);
+                                log::error!("Read error at {}-{}: {}", start, end, e);
                                 return tauri::http::Response::builder()
                                     .status(tauri::http::StatusCode::INTERNAL_SERVER_ERROR)
                                     .header("Access-Control-Allow-Origin", "*")
@@ -238,13 +244,13 @@ pub fn run_app() -> tauri::Result<()> {
                 }
             }
 
-            // 无 Range 请求
-            let chunk_size = std::cmp::min(file_len, 2 * 1024 * 1024); // 2MB
+            // 无 Range 请求：返回第一个 chunk 的 206 Partial Content
+            // 这对 WebKit 非常重要，它如果第一次请求没拿到数据且状态码不是 206，可能会直接报错
+            let chunk_size = std::cmp::min(file_len, 2 * 1024 * 1024); // 2MB start chunk
             let mut buffer = vec![0; chunk_size as usize];
             if let Err(e) = file.read_exact(&mut buffer) {
                  log::warn!("Initial read_exact warning: {}", e);
             }
-
             let end_pos = if chunk_size > 0 { chunk_size - 1 } else { 0 };
 
             tauri::http::Response::builder()
@@ -254,7 +260,8 @@ pub fn run_app() -> tauri::Result<()> {
                 .header("Content-Length", chunk_size.to_string())
                 .header("Content-Type", mime_type)
                 .header("Access-Control-Allow-Origin", "*")
-                .header("Access-Control-Allow-Headers", "Range, Accept-Encoding")
+                .header("Access-Control-Allow-Methods", "GET, OPTIONS")
+                .header("Access-Control-Expose-Headers", "Content-Range, Content-Length, Accept-Ranges")
                 .body(buffer).unwrap()
         })
         .invoke_handler(tauri::generate_handler![

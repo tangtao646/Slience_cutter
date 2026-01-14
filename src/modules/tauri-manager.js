@@ -44,20 +44,12 @@ export class TauriManager {
         }
 
         if (this.isTauri) {
-            // 使用自定义的 video-stream 协议
-            // Rust 后端已注册此协议并支持 HTTP Range Requests (关键)
-            // 路径格式: video-stream://localhost/<path>
-            // 必须处理编码，因为后端会进行 percent_decode_str
-            
+            // 回退到自定义协议 video-stream://
+            // 原因：asset:// 协议在 macOS Release 包中被 WebKit 严格限制，无法播放视频
+            // video-stream 协议经测试配合增强的 Response Headers 可正常工作
             const encodedPath = encodeURI(path)
                 .replace(/#/g, '%23')
                 .replace(/\?/g, '%3F');
-                
-            // macOS/Unix 需要保留绝对路径的开头的 /
-            // Windows 可能需要保留盘符
-            // 后端逻辑: if uri.starts_with("video-stream://localhost/") -> &uri[25..]
-            // 如果 encodedPath 以 / 开头 (Unix)，拼接后就是 video-stream://localhost//Users/... 
-            // 后端截取后得到 /Users/... -> decode -> /Users/... (完美)
             
             let finalPath = encodedPath;
             if (!finalPath.startsWith('/') && !path.match(/^[a-zA-Z]:/)) {
@@ -65,13 +57,13 @@ export class TauriManager {
             }
 
             const url = `video-stream://localhost${finalPath}`;
-            console.log('[TauriManager] Generated custom protocol URL:', url);
+            console.log('[TauriManager] Using custom video-stream protocol:', url);
             return url;
         }
-          
-        }
-       
-    
+
+        return path;
+    }
+
 
     async extractAudio(path, sampleRate = 16000) {
         console.log('[TauriManager] extractAudio:', path);
@@ -157,6 +149,7 @@ export class TauriManager {
         return {};
     }
 }
+
 
 let managerInstance = null;
 export function getTauriManager() {
