@@ -47,6 +47,12 @@ npm run tauri dev
 npm run tauri build
 ```
 
+### macOS Signature Issue
+If you encounter the "App is damaged" or "can't be opened" error on macOS, it is because the app is not signed with an Apple Developer ID. Please run the following command in Terminal to remove the quarantine attribute:
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/silence-cutter.app
+```
+
 ## 🏗️ Architecture Highlights
 
 ### 1. Automated Pipeline

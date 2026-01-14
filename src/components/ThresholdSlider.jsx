@@ -43,7 +43,7 @@ const ThresholdSlider = ({ threshold, setThreshold, isAuto, setIsAuto }) => {
                         />
                         {t('sidebar.threshold_auto')}
                     </label>
-                    <div className="threshold-value" style={{ fontSize: '11px', color: isAuto ? '#777' : '#eee', width: '45px', textAlign: 'right' }}>
+                    <div className="threshold-value" style={{ fontSize: '11px', color: isAuto ? '#777' : '#eee', width: '60px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                         {threshold > -100 ? `${threshold.toFixed(1)} dB` : '-∞'}
                     </div>
                 </div>
