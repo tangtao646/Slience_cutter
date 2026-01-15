@@ -97,14 +97,15 @@ jobs:
 # --- 以下是新增的调试及远程桌面支持 ---
       
       - name: Setup Tmate Session (Debug)
-        # 仅在 Windows 且任务失败或手动触发时运行，避免每次 Release 都卡住
-        if: matrix.platform == 'windows-latest' && (failure() || github.event_name == 'workflow_dispatch')
+        # 修改为：仅在 Windows 平台运行，无论成功与否都开启 SSH，方便测试生成的 exe
+        if: matrix.platform == 'windows-latest'
         uses: mxschmitt/action-tmate@v3
         with:
           limit-access-to-actor: true
 
       - name: Configure RDP Access (Run this in Tmate)
-        if: matrix.platform == 'windows-latest' && (failure() || github.event_name == 'workflow_dispatch')
+        # 同样修改为：仅在 Windows 平台运行
+        if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
           # 设置远程桌面所需的密码 (用户名为 runneradmin)
