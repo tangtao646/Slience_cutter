@@ -69,6 +69,3 @@ sudo xattr -rd com.apple.quarantine /Applications/silence-cutter.app
 - **商业使用/商店分发**：**严格禁止**。未经作者许可，严禁将本项目代码打包上架至任何应用商店（如 Microsoft Store）。
 - **二次开发**：允许 Fork 学习，但严禁换皮后进行二次分发。
 
----
-Developed with ❤️ by tangtao. 
-Using Gemini 3 Flash (Preview) for intelligent code guidance.

@@ -94,30 +94,3 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-# --- 以下是新增的调试及远程桌面支持 ---
-      
-      - name: Auto-Configure RDP and Password
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        run: |
-          # 1. 强制设置用户密码
-          net user runneradmin "CutterTest123!"
-          
-          # 2. 开启远程桌面 (RDP) 注册表开关
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name "fDenyTSConnections" -Value 0
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' -Name "UserAuthentication" -Value 0
-          
-          # 3. 彻底关闭系统防火墙（防止 3389 端口被拦截）
-          netsh advfirewall set allprofiles state off
-          
-          # 4. 允许远程连接
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          
-          Write-Host "RDP 自动化配置完成！"
-          Write-Host "用户: runneradmin | 密码: CutterTest123!"
-
-      - name: Setup Tmate Session (Debug)
-        if: matrix.platform == 'windows-latest'
-        uses: mxschmitt/action-tmate@v3
-        with:
-          limit-access-to-actor: true

@@ -70,6 +70,4 @@ This project is licensed under the **[Restricted Source-Available License](LICEN
 - **Commercial Use / Store Distribution**: **Strictly Prohibited**. Unauthorized distribution on any app store (e.g., Microsoft Store) is forbidden.
 - **Derivative Works**: Repackaging/reskinning for secondary distribution is strictly prohibited.
 
----
-Developed with ❤️ by tangtao. 
-Using Gemini 3 Flash (Preview) for intelligent code guidance.
+
