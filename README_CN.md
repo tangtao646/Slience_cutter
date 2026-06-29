@@ -1,4 +1,4 @@
-# Silence Cutter (静音剪霸) 🚀
+# Silence Cutter (静音剪切) 
 
 Silence Cutter 是一款基于 **Tauri v2 + React** 构建的高性能全自动视频静音切除工具。它专注于通过音频分析技术，自动识别并消除视频中的冗余静音片段，极大提升短视频、网课、录屏素材的初剪效率。
 
